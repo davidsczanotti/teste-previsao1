@@ -12,7 +12,6 @@ yfinance = "0.2.37"
 neuralforecast = "1.7.2"
 pytorch-forecasting = "1.0.0"
 vectorbt = "0.28.1"
-requests-cache = "^1.2.1"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
