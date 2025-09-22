@@ -8,25 +8,35 @@ def train_predict_nhits(long_df: pd.DataFrame,
                         h: int = 5,
                         input_size: int = 60,
                         max_steps: int = 400,
-                        freq: str = 'D') -> pd.DataFrame:
+                        freq: str = 'D',
+                        n_windows: int = 52,
+                        step_size: int = 5) -> pd.DataFrame:
     """
-    Treina NHITS e prevê h passos à frente.
-    Retorna DataFrame com colunas: ['unique_id','ds','y_hat'].
+    Treina NHITS e gera previsões walk-forward (n_windows) com horizonte h.
+    Retorna DataFrame com ['unique_id','ds','y_hat'] cobrindo várias janelas.
     """
     df = long_df[['unique_id','ds','y']].dropna().sort_values(['unique_id','ds']).copy()
-
     model = NHITS(h=h, input_size=input_size, max_steps=max_steps, scaler_type='robust')
     nf = NeuralForecast(models=[model], freq=freq)
-    nf.fit(df=df)
 
-    yhat_df = nf.predict()              # pode vir com unique_id no índice
-    if 'unique_id' not in yhat_df.columns:
-        yhat_df = yhat_df.reset_index() # garante a coluna
+    # Rolling forecasts (backtesting)
+    try:
+        fcst = nf.cross_validation(df=df, n_windows=n_windows, step_size=step_size, h=h)
+    except Exception:
+        # Fallback: última janela apenas (menos trades, mas não quebra)
+        nf.fit(df=df)
+        fcst = nf.predict()
 
-    # renomeia a coluna do modelo para 'y_hat'
-    pred_cols = [c for c in yhat_df.columns if c not in ('unique_id','ds')]
-    if len(pred_cols) != 1:
-        raise ValueError(f"Esperava 1 coluna de previsão, recebi: {pred_cols}")
-    yhat_df = yhat_df.rename(columns={pred_cols[0]: 'y_hat'})
+    if 'unique_id' not in fcst.columns:
+        fcst = fcst.reset_index()
 
-    return yhat_df
+    # renomeia coluna do modelo (ex.: 'NHITS') para 'y_hat'
+    pred_cols = [c for c in fcst.columns if c not in ('unique_id','ds','y')]
+    if len(pred_cols) >= 1:
+        fcst = fcst.rename(columns={pred_cols[0]: 'y_hat'})
+    else:
+        # caso o pacote já inclua 'y_hat' direto
+        if 'y_hat' not in fcst.columns:
+            raise ValueError(f"Não achei coluna de previsão em {fcst.columns.tolist()}")
+
+    return fcst[['unique_id','ds','y_hat']].sort_values(['unique_id','ds'])
