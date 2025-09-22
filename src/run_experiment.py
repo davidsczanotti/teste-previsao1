@@ -11,7 +11,8 @@ from src.backtest import run_backtests, summarize_portfolios
 TICKERS = ["PETR4.SA", "VALE3.SA", "ITUB4.SA", "BOVA11.SA"]
 
 # Escolha por ativo (com base nos resultados anteriores):
-horizons = {"VALE3.SA": 5, "ITUB4.SA": 5, "PETR4.SA": 3, "BOVA11.SA": 3}
+horizons = {"VALE3.SA": 5, "ITUB4.SA": 5, "PETR4.SA": 2, "BOVA11.SA": 3}  # ↓ de 3 para 2 (única mudança deste passo)
+
 volks = {
     "VALE3.SA": 0.35,  # ↑ estava 0.30
     "ITUB4.SA": 0.25,  # mantém
@@ -39,12 +40,12 @@ def main():
     signals = build_signals_from_forecast(
         close_wide=close,
         yhat_df=yhat_df,
-        horizon=horizons,          # seu dict atual
+        horizon=horizons,  # seu dict atual
         use_vol_threshold=True,
-        vol_k=volks,               # seu dict atual
+        vol_k=volks,  # seu dict atual
         early_exit_on_flip=True,
-        min_hold=min_holds,        # << AQUI
-        exit_symmetric=False
+        min_hold=min_holds,  # << AQUI
+        exit_symmetric=False,
     )
 
     # DEBUG: quantos sinais por ticker?
