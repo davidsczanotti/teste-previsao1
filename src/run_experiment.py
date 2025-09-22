@@ -22,14 +22,12 @@ def main():
     long_df = add_ta_features(long_df)
 
     print("3) Treinando NHITS (rolling) e prevendo h=5...")
-    yhat_df = train_predict_nhits(
-        long_df, h=5, input_size=60, max_steps=300, freq="D", n_windows=260, step_size=1  # mais janelas e passo diário
-    )
+    yhat_df = train_predict_nhits(long_df, h=3, input_size=60, max_steps=300, freq="D", n_windows=260, step_size=1)
     print(yhat_df.tail())
 
     print("4) Gerando sinais a partir das previsões...")
     signals = build_signals_from_forecast(
-        close_wide=close, yhat_df=yhat_df, horizon=5, use_vol_threshold=True, vol_k=0.25  # << subir de 0.15 para 0.25
+        close_wide=close, yhat_df=yhat_df, horizon=3, use_vol_threshold=True, vol_k=0.25
     )
 
     # DEBUG: quantos sinais por ticker?
