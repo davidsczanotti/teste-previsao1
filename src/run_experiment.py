@@ -12,7 +12,12 @@ TICKERS = ["PETR4.SA", "VALE3.SA", "ITUB4.SA", "BOVA11.SA"]
 
 # Escolha por ativo (com base nos resultados anteriores):
 horizons = {"VALE3.SA": 5, "ITUB4.SA": 5, "PETR4.SA": 3, "BOVA11.SA": 3}
-volks = {"VALE3.SA": 0.25, "ITUB4.SA": 0.25, "PETR4.SA": 0.30, "BOVA11.SA": 0.25}
+volks = {
+    "VALE3.SA": 0.30,  # ↑ de 0.25 -> 0.30 para cortar ruído
+    "ITUB4.SA": 0.25,  # mantém (já está bom)
+    "PETR4.SA": 0.35,  # ↑ de 0.30 -> 0.35 para ser mais seletivo
+    "BOVA11.SA": 0.25,  # mantém
+}
 
 
 def main():
@@ -36,8 +41,8 @@ def main():
 
     # DEBUG: quantos sinais por ticker?
     for t in TICKERS:
-        ent = signals[t]['entries'].sum()
-        exi = signals[t]['exits'].sum()
+        ent = signals[t]["entries"].sum()
+        exi = signals[t]["exits"].sum()
         print(f"DEBUG {t}: entries={int(ent)} exits={int(exi)}")
 
     print("5) Backtest por ticker (vectorbt)...")
