@@ -38,11 +38,12 @@ def main():
     signals = build_signals_from_forecast(
         close_wide=close,
         yhat_df=yhat_df,
-        horizon=horizons,  # seu dict atual
+        horizon=horizons,
         use_vol_threshold=True,
-        vol_k=volks,  # seu dict atual
-        early_exit_on_flip=True,  # já é o default, mas deixo explícito
-        min_hold=2,  # << único ajuste deste passo
+        vol_k=volks,
+        early_exit_on_flip=True,
+        min_hold=2,
+        exit_symmetric=False     # << voltar ao modo “exp_ret < 0”
     )
 
     # DEBUG: quantos sinais por ticker?

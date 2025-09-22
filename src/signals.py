@@ -11,7 +11,8 @@ def build_signals_from_forecast(close_wide: pd.DataFrame,
                                 vol_window: int = 20,
                                 vol_k: Union[float, Dict[str,float]] = 0.25,
                                 early_exit_on_flip: bool = True,
-                                min_hold: int = 1) -> dict:
+                                min_hold: int = 1,
+                                exit_symmetric: bool = False) -> dict:
     """
     Sinais a partir da previsão do próximo pregão.
     - horizon e vol_k aceitam int/float único ou dict por ticker.
@@ -76,10 +77,12 @@ def build_signals_from_forecast(close_wide: pd.DataFrame,
         exits_hz = entries.shift(hz).fillna(False)
 
         if early_exit_on_flip:
-            if use_vol_threshold:
-                dyn_out = -vk * vol20  # <<< limiar simétrico
+            if use_vol_threshold and exit_symmetric:
+                # limiar simétrico: só sai se ficar "bem negativo"
+                dyn_out = -vk * vol20
                 flip = (exp_ret < dyn_out).shift(min_hold).fillna(False)
             else:
+                # padrão: sai quando expectativa fica < 0 (mais responsivo)
                 flip = (exp_ret < 0.0).shift(min_hold).fillna(False)
             exits = (exits_hz | flip)
         else:
