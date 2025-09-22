@@ -40,12 +40,13 @@ def main():
     signals = build_signals_from_forecast(
         close_wide=close,
         yhat_df=yhat_df,
-        horizon=horizons,  # seu dict atual
+        horizon=horizons,  # {VALE3:5, ITUB4:5, PETR4:2, BOVA11:3}
         use_vol_threshold=True,
-        vol_k=volks,  # seu dict atual
+        vol_k=volks,  # {VALE3:0.35, ITUB4:0.25, PETR4:0.45, BOVA11:0.25}
         early_exit_on_flip=True,
-        min_hold=min_holds,  # << AQUI
+        min_hold=min_holds,  # {ITUB4:1, VALE3:2, PETR4:1, BOVA11:2}
         exit_symmetric=False,
+        trend_sma={"PETR4.SA": 200},  # <<< ÚNICA NOVIDADE DESTE PASSO
     )
 
     # DEBUG: quantos sinais por ticker?
