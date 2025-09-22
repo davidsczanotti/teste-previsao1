@@ -8,7 +8,7 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.11"
-yfinance = "0.2.37"
+yahooquery = "^2.3.0"
 neuralforecast = "1.7.2"
 pytorch-forecasting = "1.0.0"
 vectorbt = "0.28.1"
