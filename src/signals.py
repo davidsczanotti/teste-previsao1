@@ -68,7 +68,7 @@ def build_signals_from_forecast(
         hz = horizon[ticker] if isinstance(horizon, dict) else horizon
         vk = vol_k[ticker] if isinstance(vol_k, dict) else vol_k
         mh = min_hold[ticker] if isinstance(min_hold, dict) else min_hold
-        tw = trend_sma[ticker] if isinstance(trend_sma, dict) else trend_sma  # <<< NOVO
+        tw = trend_sma.get(ticker) if isinstance(trend_sma, dict) else trend_sma
 
         # volatilidade 20d
         ret = px.pct_change()
