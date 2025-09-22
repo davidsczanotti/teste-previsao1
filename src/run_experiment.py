@@ -13,12 +13,7 @@ TICKERS = ["PETR4.SA", "VALE3.SA", "ITUB4.SA", "BOVA11.SA"]
 # Escolha por ativo (com base nos resultados anteriores):
 horizons = {"VALE3.SA": 5, "ITUB4.SA": 5, "PETR4.SA": 2, "BOVA11.SA": 3}  # ↓ de 3 para 2 (única mudança deste passo)
 
-volks = {
-    "VALE3.SA": 0.35,
-    "ITUB4.SA": 0.25,
-    "PETR4.SA": 0.50,  # ↑ de 0.45 -> 0.50 (mais seletivo)
-    "BOVA11.SA": 0.25
-}
+volks = {"VALE3.SA": 0.35, "ITUB4.SA": 0.25, "PETR4.SA": 0.50, "BOVA11.SA": 0.25}  # ↑ de 0.45 -> 0.50 (mais seletivo)
 
 min_holds = {
     "ITUB4.SA": 1,  # mantém
@@ -46,13 +41,13 @@ def main():
     signals = build_signals_from_forecast(
         close_wide=close,
         yhat_df=yhat_df,
-        horizon=horizons,                 # {VALE3:5, ITUB4:5, PETR4:2, BOVA11:3}
+        horizon=horizons,  # {VALE3:5, ITUB4:5, PETR4:2, BOVA11:3}
         use_vol_threshold=True,
-        vol_k=volks,                      # {VALE3:0.35, ITUB4:0.25, PETR4:0.50, BOVA11:0.25}
+        vol_k=volks,  # {VALE3:0.35, ITUB4:0.25, PETR4:0.50, BOVA11:0.25}
         early_exit_on_flip=True,
-        min_hold=min_holds,               # {ITUB4:1, VALE3:2, PETR4:1, BOVA11:2}
+        min_hold=min_holds,  # {ITUB4:1, VALE3:2, PETR4:1, BOVA11:2}
         exit_symmetric=False,
-        trend_sma={"PETR4.SA": 200, "VALE3.SA": 200}  # << única adição
+        trend_sma={"PETR4.SA": 200, "VALE3.SA": 100},  # << só isso
     )
 
     # DEBUG: quantos sinais por ticker?
