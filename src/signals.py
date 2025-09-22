@@ -206,7 +206,10 @@ def build_signals_from_forecast(
 
         # alinhar ao mesmo índice de preços
         # (assumindo que 'ds' são dias de negociação compatíveis com o índice de close)
-        y_series = y_series.reindex(close_wide.index).copy()
+        if not y_series.index.is_unique:
+            y_series = y_series[~y_series.index.duplicated(keep="last")]
+
+        y_series = y_series.reindex(close_wide.index).copy() 
 
         # IMPORTANTÍSSIMO:
         # usar o passo do horizonte -> deslocar para trás h_t dias: em t, avaliamos y_hat de t+h_t
