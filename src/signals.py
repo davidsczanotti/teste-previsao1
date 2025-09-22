@@ -11,7 +11,7 @@ def build_signals_from_forecast(close_wide: pd.DataFrame,
                                 vol_window: int = 20,
                                 vol_k: Union[float, Dict[str,float]] = 0.25,
                                 early_exit_on_flip: bool = True,
-                                min_hold: int = 1,
+                                min_hold: Union[int, Dict[str,int]] = 1,
                                 exit_symmetric: bool = False) -> dict:
     """
     Sinais a partir da previsão do próximo pregão.
@@ -61,6 +61,7 @@ def build_signals_from_forecast(close_wide: pd.DataFrame,
         # parâmetros por ticker
         hz = horizon[ticker] if isinstance(horizon, dict) else horizon
         vk = vol_k[ticker] if isinstance(vol_k, dict) else vol_k
+        mh = min_hold[ticker] if isinstance(min_hold, dict) else min_hold 
 
         # volatilidade 20d para limiares dinâmicos (uma vez só)
         ret = px.pct_change()
@@ -75,15 +76,12 @@ def build_signals_from_forecast(close_wide: pd.DataFrame,
 
         # SAÍDA: horizonte OU virada negativa “significativa”
         exits_hz = entries.shift(hz).fillna(False)
-
         if early_exit_on_flip:
             if use_vol_threshold and exit_symmetric:
-                # limiar simétrico: só sai se ficar "bem negativo"
                 dyn_out = -vk * vol20
-                flip = (exp_ret < dyn_out).shift(min_hold).fillna(False)
+                flip = (exp_ret < dyn_out).shift(mh).fillna(False)     # << usa mh
             else:
-                # padrão: sai quando expectativa fica < 0 (mais responsivo)
-                flip = (exp_ret < 0.0).shift(min_hold).fillna(False)
+                flip = (exp_ret < 0.0).shift(mh).fillna(False)         # << usa mh
             exits = (exits_hz | flip)
         else:
             exits = exits_hz

@@ -18,6 +18,7 @@ volks = {
     "PETR4.SA": 0.40,  # ↑ estava 0.35
     "BOVA11.SA": 0.25,  # mantém
 }
+min_holds = {"ITUB4.SA": 1, "VALE3.SA": 2, "PETR4.SA": 2, "BOVA11.SA": 2}
 
 
 def main():
@@ -38,12 +39,12 @@ def main():
     signals = build_signals_from_forecast(
         close_wide=close,
         yhat_df=yhat_df,
-        horizon=horizons,
+        horizon=horizons,          # seu dict atual
         use_vol_threshold=True,
-        vol_k=volks,
+        vol_k=volks,               # seu dict atual
         early_exit_on_flip=True,
-        min_hold=2,
-        exit_symmetric=False     # << voltar ao modo “exp_ret < 0”
+        min_hold=min_holds,        # << AQUI
+        exit_symmetric=False
     )
 
     # DEBUG: quantos sinais por ticker?
