@@ -1,0 +1,98 @@
+poetry run python manage.py runserver 0.0.0.0:3003
+poetry run celery -A core worker -l info
+poetry run python manage.py requeue_pending_docs
+poetry run python manage.py migrate
+poetry run python manage.py makemigrations
+poetry run python manage.py createsuperuser
+docker compose -f docker-compose.prod.yml exec web python manage.py makemigrations
+docker compose -f docker-compose.prod.yml exec web python manage.py migrate
+docker compose -f docker-compose.prod.yml exec web python manage.py createsuperuser
+poetry run django-admin startproject core .
+poetry run python manage.py startapp curso_francisco
+poetry new --flat nome-projeto
+poetry env use 3.12 
+">=3.12,<4.0"
+poetry env activate
+source /home/davidsc/.cache/pypoetry/virtualenvs/teste-previsao1-imu1ZzTr-py3.12/bin/activate
+source $(poetry env info -p)/bin/activate
+docker-compose up
+docker-compose up --build
+poetry add python-dotenv
+poetry add black djlint --group dev
+
+git pull origin main &&  docker compose -f docker-compose.prod.yml up -d && docker compose -f docker-compose.prod.yml up -d --build
+
+git pull origin main &&  docker compose -f docker-compose.prod.yml down -v && docker compose -f docker-compose.prod.yml up -d --build
+clear && docker compose -f docker-compose.prod.yml logs redis web worker -f
+
+
+wsl->git push -u origin main
+server->git pull origin main
+
+parar de pedir senha toda hora 
+git config --global credential.helper cache
+git config --global credential.helper 'cache --timeout=360000'
+
+
+git checkout -- docker-compose.prod.yml
+
+listar os commits
+git log --oneline --graph --decorate
+f430e19 (HEAD -> main, origin/main) alteracoes no plan_mcp para melhorar a experiencia
+
+diagnosticos
+docker compose -f docker-compose.prod.yml logs redis web worker
+
+
+
+Comandos Seguros para o Dia a Dia:
+Para iniciar ou reiniciar: docker compose -f docker-compose.prod.yml up -d
+Para aplicar mudanças no código: docker compose -f docker-compose.prod.yml up -d --build
+Para forçar a recriação dos contêineres (sem tocar nos dados): docker compose -f docker-compose.prod.yml up -d --force-recreate
+Para parar os serviços: docker compose -f docker-compose.prod.yml stop
+
+
+Comandos PERIGOSOS (Evitar em Produção):
+docker compose -f docker-compose.prod.yml down **-v** (O -v apaga todos os dados).
+docker system prune -a --volumes (Este comando apaga TUDO do Docker no servidor, incluindo todos os cofres de todos os projetos).
+
+
+criar usuario para mcp assistent
+
+-- 1. Crie um novo usuário (role) para o agente de IA
+CREATE ROLE ia_agent WITH LOGIN PASSWORD 'coloque_uma_senha_forte_aqui';
+
+-- 2. Conecte-se ao seu banco de dados específico (ex: 'verisage_db')
+\c verisage_db
+
+-- 3. Conceda permissão de CONEXÃO ao banco de dados
+GRANT CONNECT ON DATABASE verisage_db TO ia_agent;
+
+-- 4. Conceda permissão de USO no schema 'public'
+GRANT USAGE ON SCHEMA public TO ia_agent;
+
+-- 5. Conceda permissão de SELECT em TODAS as tabelas existentes
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO ia_agent;
+
+-- 6. Configure permissões futuras para novas tabelas (importante!)
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO ia_agent;
+
+
+-- 7. Se necessario trocar a senha
+ALTER ROLE ia_agent WITH PASSWORD 'ia_agent@123!';
+
+
+
+5740d4f (HEAD -> main, origin/main) inserindo o prompt no log
+
+git reset --hard 9a0ef54 
+git push origin main --force
+
+
+primeiro_agent_llm = "gpt-5-mini"
+segundo_agent_llm = "gemini-2.5-pr
+terceiro_agent_llm = "gemini-2.5-pr
+
+
+
+tree -I "__pycache__|.venv|*.pyc|models"
