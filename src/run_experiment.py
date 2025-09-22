@@ -19,7 +19,12 @@ volks = {
     "PETR4.SA": 0.40,  # ↑ estava 0.35
     "BOVA11.SA": 0.25,  # mantém
 }
-min_holds = {"ITUB4.SA": 1, "VALE3.SA": 2, "PETR4.SA": 2, "BOVA11.SA": 2}
+min_holds = {
+    "ITUB4.SA": 1,  # mantém
+    "VALE3.SA": 2,  # mantém
+    "PETR4.SA": 1,  # << de 2 para 1 (permite sair no D+1 se virar)
+    "BOVA11.SA": 2,  # mantém
+}
 
 
 def main():
