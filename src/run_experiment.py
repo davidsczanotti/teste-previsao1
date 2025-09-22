@@ -10,6 +10,7 @@ from src.backtest import run_backtests, summarize_portfolios
 
 TICKERS = ["PETR4.SA", "VALE3.SA", "ITUB4.SA", "BOVA11.SA"]
 
+
 def main():
     print("1) Baixando dados...")
     end = (pd.Timestamp.today().normalize() - BDay(7)).date().isoformat()
@@ -22,8 +23,7 @@ def main():
 
     print("3) Treinando NHITS (rolling) e prevendo h=5...")
     yhat_df = train_predict_nhits(
-        long_df, h=5, input_size=60, max_steps=300, freq='D',
-        n_windows=260, step_size=1   # mais janelas e passo diário
+        long_df, h=5, input_size=60, max_steps=300, freq="D", n_windows=260, step_size=1  # mais janelas e passo diário
     )
     print(yhat_df.tail())
 
@@ -32,14 +32,14 @@ def main():
         close_wide=close,
         yhat_df=yhat_df,
         horizon=5,
-        exp_thresh=0.0,            # entra com exp_ret > 0 (bem permissivo)
-        use_vol_threshold=False     # se quiser dinâmico: True e ajuste vol_k
+        use_vol_threshold=True,  # <<< ativa limiar dinâmico
+        vol_k=0.15,  # 15% da vol de 20 dias como barreira
     )
 
     # DEBUG: quantos sinais por ticker?
     for t in TICKERS:
-        ent = signals[t]['entries'].sum()
-        exi = signals[t]['exits'].sum()
+        ent = signals[t]["entries"].sum()
+        exi = signals[t]["exits"].sum()
         print(f"DEBUG {t}: entries={int(ent)} exits={int(exi)}")
 
     print("5) Backtest por ticker (vectorbt)...")
@@ -50,6 +50,7 @@ def main():
 
     summary.to_csv("reports/summary_baseline.csv", float_format="%.4f")
     print("\nRelatório salvo em: reports/summary_baseline.csv")
+
 
 if __name__ == "__main__":
     main()
