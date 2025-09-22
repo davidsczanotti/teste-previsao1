@@ -1,29 +1,22 @@
 # src/ingest.py
+from __future__ import annotations
 import pandas as pd
-import time
-from yahooquery import Ticker
+import yfinance as yf
 
-TICKERS = ["PETR4.SA", "VALE3.SA", "ITUB4.SA", "BOVA11.SA"]
-
-
-def get_prices(start="2015-01-01"):
+def get_prices(tickers, start="2015-01-01", end=None) -> pd.DataFrame:
     """
-    Baixa os preços de fechamento para uma lista de tickers usando yahooquery,
-    que é mais robusto contra falhas de API.
+    Baixa OHLCV ajustado do yfinance.
+    Retorna um DataFrame 'Close' com colunas = tickers.
     """
-    print("Baixando dados com yahooquery...")
-    try:
-        # yahooquery baixa todos os tickers de forma eficiente e robusta
-        tickers = Ticker(TICKERS, asynchronous=True)
-        df = tickers.history(start=start, adj_ohlc=True)
-
-        if not isinstance(df, pd.DataFrame) or df.empty:
-            raise ValueError("Nenhum dado foi retornado pelo yahooquery.")
-
-        # O resultado vem em um MultiIndex, vamos pivotar para o formato desejado
-        close = df.reset_index().pivot(index="date", columns="symbol", values="close")
-        print("Sucesso ao baixar os dados!")
-        return close.dropna(how="all")
-    except Exception as e:
-        print(f"Ocorreu um erro com yahooquery: {e}")
-        raise ConnectionError("Não foi possível baixar nenhum dado.")
+    data = yf.download(
+        tickers, start=start, end=end,
+        auto_adjust=True, progress=False, group_by='ticker'
+    )
+    # yfinance pode retornar multiindex diferente quando 1 vs n tickers
+    if isinstance(data.columns, pd.MultiIndex):
+        close = data.xs('Close', axis=1, level=1)
+    else:
+        close = data[['Close']].rename(columns={'Close': tickers if isinstance(tickers,str) else tickers[0]})
+    close = close.dropna(how="all")
+    close.index = pd.to_datetime(close.index)
+    return close.sort_index()

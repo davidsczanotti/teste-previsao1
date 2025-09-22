@@ -1,66 +1,36 @@
-# src/models_ts.py (trecho)
+# src/models_ts.py
+from __future__ import annotations
 import pandas as pd
-import torch
-from pytorch_forecasting import TimeSeriesDataSet
-from pytorch_forecasting.models import TemporalFusionTransformer
 from neuralforecast import NeuralForecast
-from neuralforecast.models import NHITS, NBEATS, PatchTST
+from neuralforecast.models import NHITS
 
+def train_predict_nhits(long_df: pd.DataFrame,
+                        h: int = 5,
+                        input_size: int = 60,
+                        max_steps: int = 400,
+                        freq: str = 'D',
+                        valid_tail: int = 120) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Treina NHITS por ticker e prevê h passos à frente (horizonte multi-step).
+    long_df: colunas ['unique_id','ds','y', ... (exógenas opcionais)]
+    Retorna:
+      - yhat_df: previsões (colunas: unique_id, ds, y_hat)
+      - split_info: df com 'train_end' por ticker para separar o backtest
+    """
+    # Mantemos somente colunas mínimas para o baseline univariado
+    df = long_df[['unique_id','ds','y']].dropna().copy()
+    df = df.sort_values(['unique_id','ds'])
 
-def build_neuralforecast(models, freq="D"):
-    return NeuralForecast(models=models, freq=freq)
+    # split simples: guarda o fim do treino por ticker
+    split_info = (df.groupby('unique_id')['ds'].max()
+                    .rename('train_end')
+                    .reset_index())
+    # Modelo
+    model = NHITS(h=h, input_size=input_size, max_steps=max_steps, scaler_type='robust')
+    nf = NeuralForecast(models=[model], freq=freq)
+    nf.fit(df=df)
 
-
-def nhits_cfg():
-    return NHITS(
-        h=5,
-        input_size=60,
-        max_steps=200,
-        n_blocks=[1, 1, 1],
-        # n_layers removido para evitar conflito com Trainer
-        mlp_units=[[512, 512], [512, 512], [512, 512]],
-    )
-
-
-def nbeats_cfg():
-    return NBEATS(
-        h=5,
-        input_size=60,
-        max_steps=200,
-        stack_types=["trend", "seasonality"],
-        n_blocks=[3, 3],
-        # n_layers removido para evitar conflito com Trainer
-        mlp_units=[[256, 256], [256, 256]],
-    )
-
-
-def patchtst_cfg():
-    return PatchTST(h=5, input_size=96, max_steps=200, n_layers=3)
-
-
-def make_tft_dataset(df, group="ticker", time="date", target="ret_fwd"):
-    # df precisa estar no formato "long": date, ticker, target, covariates...
-    training = TimeSeriesDataSet(
-        df,
-        time_idx=time,
-        target=target,
-        group_ids=[group],
-        max_encoder_length=60,
-        max_prediction_length=5,
-        time_varying_known_reals=[],
-        time_varying_unknown_reals=[target, "rsi_14", "MACD_12_26_9"],
-        allow_missing_timesteps=True,
-    )
-    return training
-
-
-def build_tft(training):
-    model = TemporalFusionTransformer.from_dataset(
-        training,
-        learning_rate=1e-3,
-        hidden_size=32,
-        attention_head_size=4,
-        loss=torch.nn.L1Loss(),  # ou QuantileLoss p/ previsões por quantis
-        dropout=0.1,
-    )
-    return model
+    yhat_df = nf.predict()
+    # yhat_df tem colunas: ['unique_id','ds','NHITS']
+    yhat_df = yhat_df.rename(columns={'NHITS': 'y_hat'})
+    return yhat_df, split_info

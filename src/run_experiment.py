@@ -1,58 +1,39 @@
-# src/run_experiment.py
+from __future__ import annotations
 import pandas as pd
 from ingest import get_prices
-from features import add_ta
-from labeling import triple_barrier_labels
-from backtest import run_backtest
-from models_ts import build_neuralforecast, nhits_cfg
+from features import make_long_df, add_ta_features
+from models_ts import train_predict_nhits
+from signals import build_signals_from_forecast
+from backtest import run_backtests, summarize_portfolios
 
-# 1) Dados
-close = get_prices()
-feats = add_ta(close)
+TICKERS = ["PETR4.SA", "VALE3.SA", "ITUB4.SA", "BOVA11.SA"]
 
-# 2) Preparar dados para NeuralForecast (formato longo)
-# O target (y) será o retorno percentual do dia seguinte.
-returns = close.pct_change().shift(-1)
-df_long = returns.unstack().reset_index()
-df_long.columns = ["unique_id", "ds", "y"]  # Agora 'y' é o retorno
-df_long["ds"] = pd.to_datetime(df_long["ds"])
-df_long = df_long.dropna()
+def main():
+    print("1) Baixando dados...")
+    close = get_prices(TICKERS, start="2016-01-01")
+    print(close.tail())
 
-# 3) Treinar N-HiTS para prever o retorno
-#    Vamos usar o preço (y) como target e a biblioteca cuidará da normalização.
-#    O modelo preverá o preço 'h' passos à frente.
+    print("2) Preparando long_df + features básicas...")
+    long_df = make_long_df(close)
+    long_df = add_ta_features(long_df)
+    # Para o baseline NHITS univariado, usaremos apenas y (preço).
 
-horizon = 5  # Prever 5 dias à frente
+    print("3) Treinando NHITS e prevendo horizonte h=5...")
+    yhat_df, split_info = train_predict_nhits(long_df, h=5, input_size=60, max_steps=300, freq='D')
+    print(yhat_df.tail())
 
-# Configura o modelo N-HiTS
-models = [nhits_cfg()]  # Podemos adicionar nbeats_cfg() e patchtst_cfg() aqui
+    print("4) Gerando sinais a partir das previsões...")
+    signals = build_signals_from_forecast(close_wide=close, yhat_df=yhat_df, horizon=5, exp_thresh=0.003)
 
-# Constrói e treina o modelo
-nf = build_neuralforecast(models=models, freq="B")  # 'B' para business days
-nf.fit(df=df_long)
+    print("5) Backtest por ticker (vectorbt)...")
+    portfolios = run_backtests(close, signals, fees=0.001, slippage=0.0005, init_cash=100_000)
+    summary = summarize_portfolios(portfolios)
+    print("\n==== RESUMO ====\n")
+    print(summary)
 
-# Gera previsões
-predictions = nf.predict()
-predictions = predictions.reset_index()
+    # Salva relatórios simples
+    summary.to_csv("reports/summary_baseline.csv", float_format="%.4f")
+    print("\nRelatório salvo em: reports/summary_baseline.csv")
 
-# 4) Gerar sinais (entries/exits) a partir das previsões
-#    Estratégia: comprar se o retorno previsto para o próximo dia for positivo.
-
-preds_petr4 = predictions[predictions["unique_id"] == "PETR4.SA"].set_index("ds")
-
-# Sinal de compra: se a previsão de retorno (NHITS) for maior que um limiar (ex: 0).
-trade_threshold = 0
-entries_partial = preds_petr4["NHITS"] > trade_threshold
-# Sinal de saída: quando a condição de entrada não for mais verdadeira.
-exits_partial = ~entries_partial
-
-# --- CORREÇÃO: Alinhar os sinais com o histórico de preços completo ---
-# Reindexa os sinais para terem o mesmo índice que a série de preços,
-# preenchendo os valores ausentes (onde não há previsão) com False.
-entries = entries_partial.reindex(close.index, fill_value=False)
-exits = exits_partial.reindex(close.index, fill_value=False)
-
-# 5) Backtest
-print("--- Executando Backtest para PETR4.SA ---")
-pf = run_backtest(close["PETR4.SA"], entries, exits)
-print(pf.stats())
+if __name__ == "__main__":
+    main()
