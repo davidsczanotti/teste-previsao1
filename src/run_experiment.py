@@ -36,7 +36,13 @@ def main():
 
     print("4) Gerando sinais a partir das previsões...")
     signals = build_signals_from_forecast(
-        close_wide=close, yhat_df=yhat_df, horizon=horizons, use_vol_threshold=True, vol_k=volks
+        close_wide=close,
+        yhat_df=yhat_df,
+        horizon=horizons,  # seu dict atual
+        use_vol_threshold=True,
+        vol_k=volks,  # seu dict atual
+        early_exit_on_flip=True,  # já é o default, mas deixo explícito
+        min_hold=2,  # << único ajuste deste passo
     )
 
     # DEBUG: quantos sinais por ticker?
