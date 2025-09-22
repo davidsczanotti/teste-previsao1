@@ -6,7 +6,7 @@ from src.ingest import get_prices
 from src.features import make_long_df, add_ta_features
 from src.models_ts import train_predict_nhits
 from src.signals import build_signals_from_forecast
-from src.backtest import run_backtests, summarize_portfolios
+from backtest import run_backtest
 
 TICKERS = ["PETR4.SA", "VALE3.SA", "ITUB4.SA", "BOVA11.SA"]
 
@@ -53,13 +53,20 @@ def main():
         exi = signals[t]["exits"].sum()
         print(f"DEBUG {t}: entries={int(ent)} exits={int(exi)}")
 
-    print("5) Backtest por ticker (vectorbt)...")
-    portfolios = run_backtests(close, signals, fees=0.001, slippage=0.0005, init_cash=100_000)
-    summary = summarize_portfolios(portfolios)
-    print("\n==== RESUMO ====\n")
-    print(summary)
+    print("\n5) Backtest por ticker (vectorbt)...\n")
+    summary_df, _ = run_backtest(
+        close_wide=close,       # << seu DataFrame de preços em colunas
+        signals=signals,        # << dict retornado do build_signals_from_forecast
+        init_cash=100_000.0,
+        fees=0.0005,            # ajuste custos conforme sua corretora
+        slippage=0.0005,        # ajuste slippage conforme sua realidade
+        direction="longonly",
+        save_trades=True,
+        report_path="reports/summary_baseline.csv",
+    )
 
-    summary.to_csv("reports/summary_baseline.csv", float_format="%.4f")
+    print("==== RESUMO ====\n")
+    print(summary_df)
     print("\nRelatório salvo em: reports/summary_baseline.csv")
 
 
