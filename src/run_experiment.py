@@ -16,10 +16,10 @@ horizons = {"VALE3.SA": 5, "ITUB4.SA": 5, "PETR4.SA": 2, "BOVA11.SA": 3}  # ↓ 
 volks = {"VALE3.SA": 0.35, "ITUB4.SA": 0.25, "PETR4.SA": 0.50, "BOVA11.SA": 0.25}  # ↑ de 0.45 -> 0.50 (mais seletivo)
 
 min_holds = {
-    "ITUB4.SA": 1,  # mantém
-    "VALE3.SA": 2,  # mantém
-    "PETR4.SA": 1,  # << de 2 para 1 (permite sair no D+1 se virar)
-    "BOVA11.SA": 2,  # mantém
+    "ITUB4.SA": 1,
+    "VALE3.SA": 1,   # <- de 2 para 1
+    "PETR4.SA": 1,
+    "BOVA11.SA": 2
 }
 
 
