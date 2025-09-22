@@ -10,6 +10,10 @@ from src.backtest import run_backtests, summarize_portfolios
 
 TICKERS = ["PETR4.SA", "VALE3.SA", "ITUB4.SA", "BOVA11.SA"]
 
+# Escolha por ativo (com base nos resultados anteriores):
+horizons = {"VALE3.SA": 5, "ITUB4.SA": 5, "PETR4.SA": 3, "BOVA11.SA": 3}
+volks = {"VALE3.SA": 0.25, "ITUB4.SA": 0.25, "PETR4.SA": 0.30, "BOVA11.SA": 0.25}
+
 
 def main():
     print("1) Baixando dados...")
@@ -27,13 +31,13 @@ def main():
 
     print("4) Gerando sinais a partir das previsões...")
     signals = build_signals_from_forecast(
-        close_wide=close, yhat_df=yhat_df, horizon=3, use_vol_threshold=True, vol_k=0.25
+        close_wide=close, yhat_df=yhat_df, horizon=horizons, use_vol_threshold=True, vol_k=volks
     )
 
     # DEBUG: quantos sinais por ticker?
     for t in TICKERS:
-        ent = signals[t]["entries"].sum()
-        exi = signals[t]["exits"].sum()
+        ent = signals[t]['entries'].sum()
+        exi = signals[t]['exits'].sum()
         print(f"DEBUG {t}: entries={int(ent)} exits={int(exi)}")
 
     print("5) Backtest por ticker (vectorbt)...")

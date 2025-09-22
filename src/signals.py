@@ -1,22 +1,21 @@
-# src/signals.py
 from __future__ import annotations
 import pandas as pd
 import numpy as np
+from typing import Union, Dict
 
 def build_signals_from_forecast(close_wide: pd.DataFrame,
                                 yhat_df: pd.DataFrame,
-                                horizon: int = 5,
+                                horizon: Union[int, Dict[str,int]] = 5,
                                 exp_thresh: float = 0.001,
                                 use_vol_threshold: bool = False,
                                 vol_window: int = 20,
-                                vol_k: float = 0.25) -> dict:
+                                vol_k: Union[float, Dict[str,float]] = 0.25) -> dict:
     """
-    Constrói sinais a partir das previsões de preço do próximo pregão.
-    Alinhamento robusto: usa merge_asof para mapear ds_pred -> ds_prev (pregão anterior).
-    - exp_thresh: limiar fixo (ex.: 0.001 = 0,1%).
-    - use_vol_threshold: se True, usa limiar dinâmico = vol_k * vol20.
+    Constrói sinais a partir das previsões do próximo pregão.
+    - horizon: pode ser int único ou dict por ticker, ex: {"VALE3.SA":5, "PETR4.SA":3}
+    - vol_k:   pode ser float único ou dict por ticker
     """
-    # garante colunas
+    # garantir colunas
     if 'unique_id' not in yhat_df.columns:
         yhat_df = yhat_df.reset_index()
     pred_all = (yhat_df[['unique_id','ds','y_hat']]
@@ -29,52 +28,42 @@ def build_signals_from_forecast(close_wide: pd.DataFrame,
 
     for ticker in close_wide.columns:
         px = close_wide[ticker].dropna()
-        df_px = pd.DataFrame({'ds_prev': px.index, 'close': px.values})
-        df_px = df_px.sort_values('ds_prev')
+        df_px = pd.DataFrame({'ds_prev': px.index, 'close': px.values}).sort_values('ds_prev')
 
-        # previsões do ticker
         pred = pred_all[pred_all['unique_id'] == ticker][['ds_pred','y_hat']].copy()
-
         if pred.empty:
-            # sem previsão => sem sinais
             signals[ticker] = {
                 'entries': pd.Series(False, index=px.index),
                 'exits':   pd.Series(False, index=px.index),
             }
             continue
 
-        # mapear cada ds_pred ao pregão anterior (<= ds_pred)
         mapped = pd.merge_asof(
             pred.sort_values('ds_pred'),
             df_px[['ds_prev']].sort_values('ds_prev'),
             left_on='ds_pred', right_on='ds_prev',
             direction='backward',
-            allow_exact_matches=False  # se ds_pred == ds_prev, exige anterior
+            allow_exact_matches=False
         ).dropna(subset=['ds_prev'])
 
-        # se várias previsões mapearem para o mesmo ds_prev (ex.: fim de semana),
-        # agregue (pegar o maior y_hat costuma ser razoável para "exp_ret")
         mapped = (mapped.groupby('ds_prev', as_index=False)
                         .agg({'y_hat':'max'}))
 
-        # série de expectativa no pregão anterior
         pred_on_prev = mapped.set_index('ds_prev')['y_hat'].reindex(px.index)
-
-        # retorno esperado do D+1 vs preço atual em D
         exp_ret = pred_on_prev / px - 1.0
+
+        # parâmetros por ticker
+        hz = horizon[ticker] if isinstance(horizon, dict) else horizon
+        vk = vol_k[ticker] if isinstance(vol_k, dict) else vol_k
 
         if use_vol_threshold:
             vol20 = px.pct_change().rolling(vol_window).std()
-            dyn_thresh = vol_k * vol20
+            dyn_thresh = vk * vol20
             entries = (exp_ret > dyn_thresh).fillna(False)
         else:
             entries = (exp_ret > exp_thresh).fillna(False)
 
-        exits = entries.shift(horizon).fillna(False)
-
-        signals[ticker] = {
-            'entries': entries.astype(bool),
-            'exits':   exits.astype(bool),
-        }
+        exits = entries.shift(hz).fillna(False)
+        signals[ticker] = {'entries': entries.astype(bool), 'exits': exits.astype(bool)}
 
     return signals
