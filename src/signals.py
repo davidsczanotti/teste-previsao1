@@ -1,39 +1,48 @@
+# src/signals.py (substitua a função por esta)
+
 from __future__ import annotations
 import pandas as pd
 import numpy as np
 
-
-def build_signals_from_forecast(
-    close_wide: pd.DataFrame, yhat_df: pd.DataFrame, horizon: int = 5, exp_thresh: float = 0.003
-) -> dict:
+def build_signals_from_forecast(close_wide: pd.DataFrame,
+                                yhat_df: pd.DataFrame,
+                                horizon: int = 5,
+                                exp_thresh: float = 0.003) -> dict:
     """
     Constrói sinais (entries/exits) por ticker a partir da previsão de preços.
-    Estratégia simples: entra comprado (long) se a variação esperada do D+1
-    for > exp_thresh (ex.: 0.3%). Sai após 'horizon' dias (hold-to-horizon).
-
-    Retorna dict[ticker] = {'entries': pd.Series(bool), 'exits': pd.Series(bool)}
+    Lógica: usa a previsão de preço do próximo pregão (ds_pred) e a atribui
+    ao pregão anterior (ds_prev) para decidir a entrada.
     """
-    # yhat_df contém h passos; pegamos o 1º passo por data (ds) e ticker
-    # Como o NF retorna previsões futuras em 'ds' > último ds observado,
-    # vamos alinhar para gerar o sinal no "dia anterior".
+    # garante colunas
+    if 'unique_id' not in yhat_df.columns:
+        yhat_df = yhat_df.reset_index()
+    yhat_df = yhat_df[['unique_id','ds','y_hat']].copy()
+    yhat_df['ds'] = pd.to_datetime(yhat_df['ds'])
+
     signals = {}
+
     for ticker in close_wide.columns:
         px = close_wide[ticker].dropna()
-        # previsões do ticker
-        f = yhat_df[yhat_df["unique_id"] == ticker].set_index("ds").sort_index()
-        # estimativa de retorno no próximo dia usando último close disponível
-        # alinhamos prev_t = ds_pred; prev_ret_t = y_hat/close_prev - 1
-        # precisamos deslocar a previsão para que o sinal seja "na véspera"
-        aligned = px.to_frame("close").join(f[["y_hat"]], how="left")
-        # a previsão cujo ds é futuro não casa com o índice do px (histórico);
-        # então vamos criar sinal baseado na variação esperada entre o último 'close'
-        # e a 1ª previsão futura disponível (shift para trás).
-        aligned["y_hat_shift1"] = aligned["y_hat"].shift(-1)
-        aligned["exp_ret_1d"] = aligned["y_hat_shift1"] / aligned["close"] - 1.0
-        entries = (aligned["exp_ret_1d"] > exp_thresh).fillna(False)
+        pred = (yhat_df[yhat_df['unique_id'] == ticker]
+                .set_index('ds')
+                .sort_index())['y_hat']
 
-        # exit: após 'horizon' dias da entrada
+        # mapeia cada ds_pred -> ds_prev (pregão anterior existente em px.index)
+        pred_on_prev = pd.Series(index=px.index, dtype='float64')
+        for ds_pred, val in pred.items():
+            # posição onde ds_pred seria inserido em px.index
+            loc = px.index.searchsorted(ds_pred) - 1
+            if loc >= 0:
+                ds_prev = px.index[loc]
+                pred_on_prev.loc[ds_prev] = val
+
+        exp_ret = pred_on_prev / px - 1.0
+        entries = (exp_ret > exp_thresh).fillna(False)
         exits = entries.shift(horizon).fillna(False)
 
-        signals[ticker] = {"entries": entries.astype(bool), "exits": exits.astype(bool)}
+        signals[ticker] = {
+            'entries': entries.astype(bool),
+            'exits'  : exits.astype(bool)
+        }
+
     return signals

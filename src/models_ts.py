@@ -8,29 +8,25 @@ def train_predict_nhits(long_df: pd.DataFrame,
                         h: int = 5,
                         input_size: int = 60,
                         max_steps: int = 400,
-                        freq: str = 'D',
-                        valid_tail: int = 120) -> tuple[pd.DataFrame, pd.DataFrame]:
+                        freq: str = 'D') -> pd.DataFrame:
     """
-    Treina NHITS por ticker e prevê h passos à frente (horizonte multi-step).
-    long_df: colunas ['unique_id','ds','y', ... (exógenas opcionais)]
-    Retorna:
-      - yhat_df: previsões (colunas: unique_id, ds, y_hat)
-      - split_info: df com 'train_end' por ticker para separar o backtest
+    Treina NHITS e prevê h passos à frente.
+    Retorna DataFrame com colunas: ['unique_id','ds','y_hat'].
     """
-    # Mantemos somente colunas mínimas para o baseline univariado
-    df = long_df[['unique_id','ds','y']].dropna().copy()
-    df = df.sort_values(['unique_id','ds'])
+    df = long_df[['unique_id','ds','y']].dropna().sort_values(['unique_id','ds']).copy()
 
-    # split simples: guarda o fim do treino por ticker
-    split_info = (df.groupby('unique_id')['ds'].max()
-                    .rename('train_end')
-                    .reset_index())
-    # Modelo
     model = NHITS(h=h, input_size=input_size, max_steps=max_steps, scaler_type='robust')
     nf = NeuralForecast(models=[model], freq=freq)
     nf.fit(df=df)
 
-    yhat_df = nf.predict()
-    # yhat_df tem colunas: ['unique_id','ds','NHITS']
-    yhat_df = yhat_df.rename(columns={'NHITS': 'y_hat'})
-    return yhat_df, split_info
+    yhat_df = nf.predict()              # pode vir com unique_id no índice
+    if 'unique_id' not in yhat_df.columns:
+        yhat_df = yhat_df.reset_index() # garante a coluna
+
+    # renomeia a coluna do modelo para 'y_hat'
+    pred_cols = [c for c in yhat_df.columns if c not in ('unique_id','ds')]
+    if len(pred_cols) != 1:
+        raise ValueError(f"Esperava 1 coluna de previsão, recebi: {pred_cols}")
+    yhat_df = yhat_df.rename(columns={pred_cols[0]: 'y_hat'})
+
+    return yhat_df
