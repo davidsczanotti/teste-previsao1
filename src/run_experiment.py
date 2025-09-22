@@ -6,7 +6,7 @@ from src.ingest import get_prices
 from src.features import make_long_df, add_ta_features
 from src.models_ts import train_predict_nhits
 from src.signals import build_signals_from_forecast
-from backtest import run_backtest
+from src.backtest import run_backtest
 
 TICKERS = ["PETR4.SA", "VALE3.SA", "ITUB4.SA", "BOVA11.SA"]
 
