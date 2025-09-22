@@ -29,11 +29,7 @@ def main():
 
     print("4) Gerando sinais a partir das previsões...")
     signals = build_signals_from_forecast(
-        close_wide=close,
-        yhat_df=yhat_df,
-        horizon=5,
-        use_vol_threshold=True,  # <<< ativa limiar dinâmico
-        vol_k=0.15,  # 15% da vol de 20 dias como barreira
+        close_wide=close, yhat_df=yhat_df, horizon=5, use_vol_threshold=True, vol_k=0.25  # << subir de 0.15 para 0.25
     )
 
     # DEBUG: quantos sinais por ticker?
