@@ -9,8 +9,8 @@ def train_predict_nhits(long_df: pd.DataFrame,
                         input_size: int = 60,
                         max_steps: int = 400,
                         freq: str = 'D',
-                        n_windows: int = 52,
-                        step_size: int = 5) -> pd.DataFrame:
+                        n_windows: int = 260,   # ~1 ano de janelas diárias
+                        step_size: int = 1) -> pd.DataFrame:
     """
     Treina NHITS e gera previsões walk-forward (n_windows) com horizonte h.
     Retorna DataFrame com ['unique_id','ds','y_hat'] cobrindo várias janelas.

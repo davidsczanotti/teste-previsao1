@@ -23,7 +23,7 @@ def main():
     print("3) Treinando NHITS (rolling) e prevendo h=5...")
     yhat_df = train_predict_nhits(
         long_df, h=5, input_size=60, max_steps=300, freq='D',
-        n_windows=52, step_size=5  # ~5 anos de janelas semanais, ajuste à vontade
+        n_windows=260, step_size=1   # mais janelas e passo diário
     )
     print(yhat_df.tail())
 
@@ -32,9 +32,15 @@ def main():
         close_wide=close,
         yhat_df=yhat_df,
         horizon=5,
-        exp_thresh=0.001,           # 0,1% fixo
-        use_vol_threshold=False      # mude para True p/ limiar dinâmico
+        exp_thresh=0.0,            # entra com exp_ret > 0 (bem permissivo)
+        use_vol_threshold=False     # se quiser dinâmico: True e ajuste vol_k
     )
+
+    # DEBUG: quantos sinais por ticker?
+    for t in TICKERS:
+        ent = signals[t]['entries'].sum()
+        exi = signals[t]['exits'].sum()
+        print(f"DEBUG {t}: entries={int(ent)} exits={int(exi)}")
 
     print("5) Backtest por ticker (vectorbt)...")
     portfolios = run_backtests(close, signals, fees=0.001, slippage=0.0005, init_cash=100_000)
