@@ -11,10 +11,10 @@ close = get_prices()
 feats = add_ta(close)
 
 # 2) Preparar dados para NeuralForecast (formato longo)
-# O target será o retorno futuro de 1 dia para simplificar.
-# Para prever retornos de 5 dias, o target seria `close.pct_change(5).shift(-5)`
-df_long = close.unstack().reset_index()
-df_long.columns = ["unique_id", "ds", "y"]
+# O target (y) será o retorno percentual do dia seguinte.
+returns = close.pct_change().shift(-1)
+df_long = returns.unstack().reset_index()
+df_long.columns = ["unique_id", "ds", "y"]  # Agora 'y' é o retorno
 df_long["ds"] = pd.to_datetime(df_long["ds"])
 df_long = df_long.dropna()
 
@@ -36,17 +36,21 @@ predictions = nf.predict()
 predictions = predictions.reset_index()
 
 # 4) Gerar sinais (entries/exits) a partir das previsões
-#    Estratégia simples: comprar se o preço previsto para D+1 for maior que o de D+0
+#    Estratégia: comprar se o retorno previsto para o próximo dia for positivo.
 
 preds_petr4 = predictions[predictions["unique_id"] == "PETR4.SA"].set_index("ds")
 
-# Para gerar sinais, precisamos alinhar as previsões com os preços atuais
-last_known_price = close["PETR4.SA"].reindex(preds_petr4.index, method="ffill")
-
-# Sinal de compra: se a previsão para o próximo dia (NHITS) for maior que o último preço conhecido.
-entries = preds_petr4["NHITS"] > last_known_price
+# Sinal de compra: se a previsão de retorno (NHITS) for maior que um limiar (ex: 0).
+trade_threshold = 0
+entries_partial = preds_petr4["NHITS"] > trade_threshold
 # Sinal de saída: quando a condição de entrada não for mais verdadeira.
-exits = ~entries
+exits_partial = ~entries_partial
+
+# --- CORREÇÃO: Alinhar os sinais com o histórico de preços completo ---
+# Reindexa os sinais para terem o mesmo índice que a série de preços,
+# preenchendo os valores ausentes (onde não há previsão) com False.
+entries = entries_partial.reindex(close.index, fill_value=False)
+exits = exits_partial.reindex(close.index, fill_value=False)
 
 # 5) Backtest
 print("--- Executando Backtest para PETR4.SA ---")

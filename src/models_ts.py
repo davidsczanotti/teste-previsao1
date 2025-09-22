@@ -17,7 +17,7 @@ def nhits_cfg():
         input_size=60,
         max_steps=200,
         n_blocks=[1, 1, 1],
-        num_layers=[2, 2, 2],
+        # n_layers removido para evitar conflito com Trainer
         mlp_units=[[512, 512], [512, 512], [512, 512]],
     )
 
@@ -29,7 +29,7 @@ def nbeats_cfg():
         max_steps=200,
         stack_types=["trend", "seasonality"],
         n_blocks=[3, 3],
-        num_layers=[4, 4],
+        # n_layers removido para evitar conflito com Trainer
         mlp_units=[[256, 256], [256, 256]],
     )
 
