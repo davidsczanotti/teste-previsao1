@@ -12,6 +12,9 @@ yahooquery = "^2.3.0"
 neuralforecast = "1.7.2"
 pytorch-forecasting = "1.0.0"
 vectorbt = "0.28.1"
+lightning = "^2.5.5"
+torchmetrics = "^1.8.2"
+yfinance = "^0.2.66"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
