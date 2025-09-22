@@ -11,22 +11,13 @@ from src.backtest import run_backtests, summarize_portfolios
 TICKERS = ["PETR4.SA", "VALE3.SA", "ITUB4.SA", "BOVA11.SA"]
 
 # Escolha por ativo (com base nos resultados anteriores):
-horizons = {"VALE3.SA": 5, "ITUB4.SA": 5, "PETR4.SA": 2, "BOVA11.SA": 3}  # ↓ de 3 para 2 (única mudança deste passo)
-
-volks = {
-    "VALE3.SA": 0.45,  # ↑ de 0.35 -> 0.45 (mais seletivo)
-    "ITUB4.SA": 0.25,
-    "PETR4.SA": 0.50,
-    "BOVA11.SA": 0.25
-}
+horizons = {"VALE3.SA": 3, "ITUB4.SA": 5, "PETR4.SA": 2, "BOVA11.SA": 3}  # ↓ de 5 -> 3
 
 
-min_holds = {
-    "ITUB4.SA": 1,
-    "VALE3.SA": 1,   # <- de 2 para 1
-    "PETR4.SA": 1,
-    "BOVA11.SA": 2
-}
+volks = {"VALE3.SA": 0.45, "ITUB4.SA": 0.25, "PETR4.SA": 0.50, "BOVA11.SA": 0.25}  # ↑ de 0.35 -> 0.45 (mais seletivo)
+
+
+min_holds = {"ITUB4.SA": 1, "VALE3.SA": 1, "PETR4.SA": 1, "BOVA11.SA": 2}  # <- de 2 para 1
 
 
 def main():
