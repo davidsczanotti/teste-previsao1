@@ -67,6 +67,11 @@ def build_signals_from_forecast(
     vol_window: int = 20,
     consec: int = 1,
     trend_sma: Optional[int] = None,
+    # Filtros RSI opcionais
+    rsi_window: Optional[int] = None,
+    rsi_min: Optional[float] = None,
+    # Evitar entradas sobrepostas enquanto posição está aberta
+    only_non_overlapping: bool = False,
     debug: bool = False,
     **kwargs,  # engole kwargs extras vindos da config/CLI
 ) -> Dict[str, Dict[str, pd.Series]]:
@@ -108,6 +113,22 @@ def build_signals_from_forecast(
         trend_ok = (close_wide.reindex_like(exp_ret) > sma).fillna(False)
         entries = entries & trend_ok
 
+    # 6.1) Filtro RSI (se habilitado): exige RSI >= rsi_min
+    if rsi_window is not None and rsi_window > 1 and rsi_min is not None:
+        try:
+            import ta
+        except Exception:
+            raise RuntimeError("Pacote 'ta' é necessário para usar o filtro RSI.")
+
+        rsi_cols = {}
+        for t in close_wide.columns:
+            s = close_wide[t].astype(float)
+            r = ta.momentum.RSIIndicator(close=s, window=int(rsi_window)).rsi()
+            rsi_cols[t] = r
+        rsi_wide = pd.DataFrame(rsi_cols).reindex_like(exp_ret)
+        rsi_ok = (rsi_wide >= float(rsi_min)).fillna(False)
+        entries = entries & rsi_ok
+
     # 7) Exigir 'consec' dias consecutivos de sinal de entrada
     if consec and consec > 1:
         entries = _require_consecutive(entries.fillna(False), consec)
@@ -115,6 +136,26 @@ def build_signals_from_forecast(
     # 8) Limpeza fina
     entries = entries.fillna(False)
     exits = exits.fillna(False)
+
+    # 8.1) Suprimir entradas sobrepostas (uma posição por vez)
+    if only_non_overlapping:
+        pruned_entries = {}
+        for t in close_wide.columns:
+            e = entries.get(t, pd.Series(False, index=exp_ret.index)).copy()
+            x = exits.get(t, pd.Series(False, index=exp_ret.index)).copy()
+            # varredura temporal para impedir múltiplas entradas antes de uma saída
+            open_pos = False
+            e_out = []
+            for ts in e.index:
+                if x.loc[ts] and open_pos:
+                    open_pos = False
+                if e.loc[ts] and not open_pos:
+                    e_out.append(True)
+                    open_pos = True
+                else:
+                    e_out.append(False)
+            pruned_entries[t] = pd.Series(e_out, index=e.index)
+        entries = pd.DataFrame(pruned_entries).reindex_like(entries).fillna(False)
 
     # 9) Montar dict final, **alinhado ao índice de cada ticker** em close_wide
     signals: Dict[str, Dict[str, pd.Series]] = {}

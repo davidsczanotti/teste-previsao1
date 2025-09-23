@@ -46,6 +46,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--trend-sma", type=int, default=None)
     p.add_argument("--dyn-thresh-k", type=float, default=None)
     p.add_argument("--vol-window", type=int, default=None)
+    # RSI opcional
+    p.add_argument("--rsi-window", type=int, default=None)
+    p.add_argument("--rsi-min", type=float, default=None)
     p.add_argument("--fees", type=float, default=None)
     p.add_argument("--slippage", type=float, default=None)
     p.add_argument("--init-cash", type=float, default=None)
@@ -54,24 +57,43 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 def merge_cli_over_config(cfg: Cfg, args: argparse.Namespace) -> Cfg:
     # data
-    if args.tickers: cfg.data.tickers = args.tickers
-    if args.start: cfg.data.start = args.start
+    if args.tickers:
+        cfg.data.tickers = args.tickers
+    if args.start:
+        cfg.data.start = args.start
     # model
-    if args.horizon is not None: cfg.model.horizon = args.horizon
-    if args.n_windows is not None: cfg.model.n_windows = args.n_windows
-    if args.step_size is not None: cfg.model.step_size = args.step_size
-    if args.input_size is not None: cfg.model.input_size = args.input_size
-    if args.max_steps is not None: cfg.model.max_steps = args.max_steps
+    if args.horizon is not None:
+        cfg.model.horizon = args.horizon
+    if args.n_windows is not None:
+        cfg.model.n_windows = args.n_windows
+    if args.step_size is not None:
+        cfg.model.step_size = args.step_size
+    if args.input_size is not None:
+        cfg.model.input_size = args.input_size
+    if args.max_steps is not None:
+        cfg.model.max_steps = args.max_steps
     # signals
-    if args.exp_thresh is not None: cfg.signals.exp_thresh = args.exp_thresh
-    if args.consec is not None: cfg.signals.consec = args.consec
-    if args.trend_sma is not None: cfg.signals.trend_sma = args.trend_sma
-    if args.dyn_thresh_k is not None: cfg.signals.dyn_thresh_k = args.dyn_thresh_k
-    if args.vol_window is not None: cfg.signals.vol_window = args.vol_window
+    if args.exp_thresh is not None:
+        cfg.signals.exp_thresh = args.exp_thresh
+    if args.consec is not None:
+        cfg.signals.consec = args.consec
+    if args.trend_sma is not None:
+        cfg.signals.trend_sma = args.trend_sma
+    if args.dyn_thresh_k is not None:
+        cfg.signals.dyn_thresh_k = args.dyn_thresh_k
+    if args.vol_window is not None:
+        cfg.signals.vol_window = args.vol_window
+    if args.rsi_window is not None:
+        cfg.signals.rsi_window = args.rsi_window
+    if args.rsi_min is not None:
+        cfg.signals.rsi_min = args.rsi_min
     # backtest
-    if args.fees is not None: cfg.backtest.fees = args.fees
-    if args.slippage is not None: cfg.backtest.slippage = args.slippage
-    if args.init_cash is not None: cfg.backtest.init_cash = args.init_cash
+    if args.fees is not None:
+        cfg.backtest.fees = args.fees
+    if args.slippage is not None:
+        cfg.backtest.slippage = args.slippage
+    if args.init_cash is not None:
+        cfg.backtest.init_cash = args.init_cash
     return cfg
 
 
@@ -83,15 +105,17 @@ def maybe_start_mlflow(cfg: Cfg):
     mlflow.set_experiment(cfg.tracking.mlflow_experiment)
     run = mlflow.start_run(run_name=cfg.experiment.name)
     # log params base
-    mlflow.log_params({
-        "tickers": ",".join(cfg.data.tickers),
-        "start": cfg.data.start,
-        **cfg.model.dict(),
-        **cfg.signals.dict(),
-        **cfg.backtest.dict(),
-        "git_hash": _git_hash() or "unknown",
-        "notes": cfg.experiment.notes or "",
-    })
+    mlflow.log_params(
+        {
+            "tickers": ",".join(cfg.data.tickers),
+            "start": cfg.data.start,
+            **cfg.model.dict(),
+            **cfg.signals.dict(),
+            **cfg.backtest.dict(),
+            "git_hash": _git_hash() or "unknown",
+            "notes": cfg.experiment.notes or "",
+        }
+    )
     return run
 
 
@@ -103,19 +127,39 @@ def main(argv=None):
         cfg = load_config(args.config)
     else:
         # fallback mínimo se não passar YAML
-        cfg = Cfg.parse_obj({
-            "data": {"tickers": args.tickers or ["VALE3.SA","PETR4.SA"], "start": args.start or "2020-01-01"},
-            "model": {"horizon": args.horizon or 5, "input_size": args.input_size or 60,
-                      "n_windows": args.n_windows or 8, "step_size": args.step_size or 1,
-                      "max_steps": args.max_steps or 300, "seed": 1, "lead_for_signal": 1},
-            "signals": {"exp_thresh": args.exp_thresh or 0.002, "consec": args.consec or 1,
-                        "trend_sma": args.trend_sma, "dyn_thresh_k": args.dyn_thresh_k, "vol_window": args.vol_window or 20},
-            "backtest": {"init_cash": args.init_cash or 100000, "fees": args.fees or 0.0005,
-                         "slippage": args.slippage or 0.0005, "direction": "longonly",
-                         "only_non_overlapping": True, "risk_per_trade": None},
-            "tracking": {"use_mlflow": False, "mlflow_experiment": "default", "mlflow_uri": None},
-            "experiment": {"name": "run", "notes": None}
-        })
+        cfg = Cfg.parse_obj(
+            {
+                "data": {"tickers": args.tickers or ["VALE3.SA", "PETR4.SA"], "start": args.start or "2020-01-01"},
+                "model": {
+                    "horizon": args.horizon or 5,
+                    "input_size": args.input_size or 60,
+                    "n_windows": args.n_windows or 8,
+                    "step_size": args.step_size or 1,
+                    "max_steps": args.max_steps or 300,
+                    "seed": 1,
+                    "lead_for_signal": 1,
+                },
+                "signals": {
+                    "exp_thresh": args.exp_thresh or 0.002,
+                    "consec": args.consec or 1,
+                    "trend_sma": args.trend_sma,
+                    "dyn_thresh_k": args.dyn_thresh_k,
+                    "vol_window": args.vol_window or 20,
+                    "rsi_window": args.rsi_window,
+                    "rsi_min": args.rsi_min,
+                },
+                "backtest": {
+                    "init_cash": args.init_cash or 100000,
+                    "fees": args.fees or 0.0005,
+                    "slippage": args.slippage or 0.0005,
+                    "direction": "longonly",
+                    "only_non_overlapping": True,
+                    "risk_per_trade": None,
+                },
+                "tracking": {"use_mlflow": False, "mlflow_experiment": "default", "mlflow_uri": None},
+                "experiment": {"name": "run", "notes": None},
+            }
+        )
     cfg = merge_cli_over_config(cfg, args)
 
     # 2) Dados
@@ -141,11 +185,7 @@ def main(argv=None):
                 f"Chaves encontradas: {list(prep_out.keys())}"
             )
     else:
-        raise TypeError(
-            "prepare_long_and_features() retornou tipo inesperado. "
-            f"Tipo: {type(prep_out)}"
-        )
-
+        raise TypeError("prepare_long_and_features() retornou tipo inesperado. " f"Tipo: {type(prep_out)}")
 
     # 3) Modelo -> previsões alinhadas na decisão (cutoff)
     print("3) Treinando NHITS (rolling) e prevendo h=5...")
@@ -169,6 +209,8 @@ def main(argv=None):
         trend_sma=cfg.signals.trend_sma,
         dyn_thresh_k=cfg.signals.dyn_thresh_k,
         vol_window=cfg.signals.vol_window,
+        rsi_window=cfg.signals.rsi_window,
+        rsi_min=cfg.signals.rsi_min,
         only_non_overlapping=cfg.backtest.only_non_overlapping,
         debug=True,
     )

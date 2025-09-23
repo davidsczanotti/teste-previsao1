@@ -34,6 +34,9 @@ class SignalsCfg(BaseModel):
     trend_sma: Optional[int] = None
     dyn_thresh_k: Optional[float] = None
     vol_window: int = 20
+    # Filtros opcionais baseados em RSI
+    rsi_window: Optional[int] = None
+    rsi_min: Optional[float] = None
 
 
 class BacktestCfg(BaseModel):

@@ -1,7 +1,7 @@
 # configs/baseline.yaml
 data:
   tickers: ["VALE3.SA", "PETR4.SA", "BOVA11.SA", "ITUB4.SA"]
-  start: "2020-01-01"
+  start: "2015-01-01"
 model:
   horizon: 5
   input_size: 60
@@ -16,6 +16,8 @@ signals:
   trend_sma: null         # ex.: 50 para filtrar por tendência
   dyn_thresh_k: 0.8       # coeficiente do limiar dinâmico (k * vol)
   vol_window: 20          # janela da volatilidade (em barras)
+  rsi_window: null        # ex.: 14 para ativar filtro RSI
+  rsi_min: null           # ex.: 50 exige momentum positivo
 backtest:
   init_cash: 100000
   fees: 0.0005
