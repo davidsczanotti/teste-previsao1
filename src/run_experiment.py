@@ -2,20 +2,18 @@ from __future__ import annotations
 
 import argparse
 
-from ingest import get_prices
-from prep import prepare_long_and_features
-from models import train_nhits_rolling, forecast_last_window
-from signals import build_signals_from_forecast
-from backtest import run_backtest
+from src.ingest import get_prices
+from src.prep import prepare_long_and_features
+from src.models import train_nhits_rolling, forecast_last_window
+from src.signals import build_signals_from_forecast
+from src.backtest import run_backtest
 
 
 def main() -> None:
     # ------------------------------------------------------------------ #
     # CLI: custos e caixa inicial
     # ------------------------------------------------------------------ #
-    parser = argparse.ArgumentParser(
-        description="Rodar experimento NHITS + geração de sinais + backtest"
-    )
+    parser = argparse.ArgumentParser(description="Rodar experimento NHITS + geração de sinais + backtest")
     parser.add_argument(
         "--fees",
         type=float,
