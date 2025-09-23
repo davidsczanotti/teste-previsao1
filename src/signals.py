@@ -7,99 +7,123 @@ import numpy as np
 import pandas as pd
 
 
-def _pivot_yhat_wide(forecast_df: pd.DataFrame) -> pd.DataFrame:
-    if forecast_df is None or not isinstance(forecast_df, pd.DataFrame):
-        raise ValueError("forecast_df precisa ser DataFrame com ['unique_id','ds',<yhat_col>].")
+__all__ = ["build_signals_from_forecast"]
 
-    df = forecast_df.copy()
-    df["ds"] = pd.to_datetime(df["ds"])
-    if "unique_id" not in df.columns or "ds" not in df.columns:
-        raise ValueError("forecast_df precisa conter 'unique_id' e 'ds'.")
 
-    ycol = None
-    for c in ("y_hat", "NHITS", "yhat", "forecast", "prediction", "y"):
-        if c in df.columns:
-            ycol = c
-            break
-    if ycol is None:
-        raise ValueError(f"Coluna de previsão não encontrada. Colunas: {list(df.columns)}")
+def _pivot_forecast_to_wide(forecast_df: pd.DataFrame, close_wide: pd.DataFrame) -> pd.DataFrame:
+    """
+    Espera forecast_df com colunas: ['unique_id', 'ds', 'y_hat'] (long).
+    Retorna DataFrame wide indexado por ds e colunas = tickers, reindexado
+    para o mesmo índice do close_wide (pode introduzir NaN onde não há previsão).
+    """
+    if not {"unique_id", "ds", "y_hat"} <= set(forecast_df.columns):
+        raise ValueError("forecast_df deve conter colunas ['unique_id','ds','y_hat'].")
 
-    wide = df.pivot(index="ds", columns="unique_id", values=ycol).sort_index()
+    wide = forecast_df.pivot(index="ds", columns="unique_id", values="y_hat")
+    # manter apenas tickers presentes em close_wide e na mesma ordem
+    cols = [c for c in close_wide.columns if c in wide.columns]
+    wide = wide.reindex(columns=cols)
+    # alinhar datas ao índice de preços
+    wide = wide.reindex(close_wide.index)
     return wide
+
+
+def _expected_return(yhat_wide: pd.DataFrame, close_wide: pd.DataFrame) -> pd.DataFrame:
+    """
+    Retorno esperado simples: (preço_previsto / preço_atual) - 1
+    Mesma forma/índice/colunas entre yhat_wide e close_wide.
+    """
+    return (yhat_wide / close_wide) - 1.0
+
+
+def _dynamic_threshold(close_wide: pd.DataFrame, k: float, vol_window: int) -> pd.DataFrame:
+    """
+    Limiar dinâmico por volatilidade: k * std(returns rolling).
+    Sem look-ahead (usa apenas dados até t).
+    """
+    rets = close_wide.pct_change()
+    vol = rets.rolling(vol_window, min_periods=max(5, vol_window // 2)).std()
+    return k * vol
+
+
+def _require_consecutive(flags: pd.DataFrame, n: int) -> pd.DataFrame:
+    """
+    Exige 'n' sinais consecutivos True (por coluna). Mantém alinhamento.
+    """
+    if n <= 1:
+        return flags
+    as_int = flags.astype(int)
+    consec_ok = as_int.rolling(n, min_periods=n).sum().eq(n)
+    return consec_ok.reindex_like(flags).fillna(False)
 
 
 def build_signals_from_forecast(
     forecast_df: pd.DataFrame,
     close_wide: pd.DataFrame,
     *,
-    exp_thresh: float = 0.002,
-    consec: int = 1,
-    trend_sma: Optional[int] = None,
-    only_non_overlapping: bool = True,
-    # NOVO: limiar dinâmico
+    horizon: int = 1,  # mantido para compat; não usamos diretamente aqui
+    exp_thresh: Optional[float] = None,
     dyn_thresh_k: Optional[float] = None,
     vol_window: int = 20,
-    # logs
-    debug: bool = True,
-    **kwargs,
+    consec: int = 1,
+    trend_sma: Optional[int] = None,
+    debug: bool = False,
+    **kwargs,  # engole kwargs extras vindos da config/CLI
 ) -> Dict[str, Dict[str, pd.Series]]:
-    if close_wide is None or not isinstance(close_wide, pd.DataFrame):
-        raise ValueError("'close_wide' precisa ser DataFrame (colunas=tickers, índice=datetime).")
+    """
+    Constrói sinais a partir das previsões (long DataFrame -> wide),
+    calcula retorno esperado por dia/ativo e aplica regras de entrada/saída.
 
-    yhat_wide = _pivot_yhat_wide(forecast_df)
-    yhat_wide = yhat_wide.reindex(close_wide.index)
+    Retorna:
+      { ticker: {"entries": Series[bool], "exits": Series[bool]} }
+    """
 
-    exp_ret = (yhat_wide - close_wide) / close_wide
+    # 1) Previsão em wide e alinhada com o índice de preços
+    yhat_wide = _pivot_forecast_to_wide(forecast_df, close_wide)
 
-    # --- limiar (fixo OU dinâmico) ---
+    # 2) Retorno esperado (mesmo índice/colunas que close_wide)
+    exp_ret = _expected_return(yhat_wide, close_wide)
+
+    # 3) Threshold: fixo ou dinâmico
     if dyn_thresh_k is not None:
-        # vol diária realizada
-        vol = close_wide.pct_change().rolling(window=vol_window, min_periods=vol_window).std()
-        thr = (dyn_thresh_k * vol).clip(lower=1e-5)  # piso pequeno para não zerar
-        entries = exp_ret > thr
-        exits = exp_ret < -thr
+        thr = _dynamic_threshold(close_wide, dyn_thresh_k, vol_window)
+        # Para dias iniciais sem vol, evita operar
+        thr = thr.fillna(np.inf)
     else:
-        entries = exp_ret > exp_thresh
-        exits = exp_ret < -exp_thresh
+        if exp_thresh is None:
+            exp_thresh = 0.0
+        thr = pd.DataFrame(exp_thresh, index=close_wide.index, columns=close_wide.columns)
 
+    # 4) *** ALINHAR *** threshold ao exp_ret (corrige o erro de labels diferentes)
+    thr = thr.reindex(index=exp_ret.index, columns=exp_ret.columns)
+
+    # 5) Regras básicas (long-only): entra se exp_ret > +thr, sai se exp_ret < -thr
+    entries = exp_ret > thr
+    exits = exp_ret < -thr
+
+    # 6) Filtro de tendência (SMA): só entra quando preço acima da SMA
+    if trend_sma is not None and trend_sma > 1:
+        sma = close_wide.rolling(trend_sma, min_periods=trend_sma).mean()
+        sma = sma.reindex_like(exp_ret)
+        trend_ok = (close_wide.reindex_like(exp_ret) > sma).fillna(False)
+        entries = entries & trend_ok
+
+    # 7) Exigir 'consec' dias consecutivos de sinal de entrada
     if consec and consec > 1:
-        entries = entries & (entries.rolling(window=consec, min_periods=consec).sum() >= consec)
-        exits = exits & (exits.rolling(window=consec, min_periods=consec).sum() >= consec)
+        entries = _require_consecutive(entries.fillna(False), consec)
 
-    if trend_sma and trend_sma > 0:
-        sma = close_wide.rolling(window=int(trend_sma), min_periods=int(trend_sma)).mean()
-        entries = entries & (close_wide > sma)
-        # exits = exits | (close_wide < sma)  # opcional
+    # 8) Limpeza fina
+    entries = entries.fillna(False)
+    exits = exits.fillna(False)
 
-    entries = entries.fillna(False).astype(bool)
-    exits = exits.fillna(False).astype(bool)
-
-    # Executar no próximo candle
-    entries = entries.shift(1, fill_value=False)
-    exits = exits.shift(1, fill_value=False)
-
-    if only_non_overlapping:
-        cleaned = {}
-        for t in close_wide.columns:
-            e = entries[t].to_numpy(copy=True)
-            x = exits[t].to_numpy(copy=True)
-            out = np.zeros_like(e, dtype=bool)
-            in_pos = False
-            for i in range(e.shape[0]):
-                if not in_pos and e[i]:
-                    out[i] = True
-                    in_pos = True
-                if in_pos and x[i]:
-                    in_pos = False
-            cleaned[t] = pd.Series(out, index=entries.index)
-        entries = pd.DataFrame(cleaned)
-
+    # 9) Montar dict final, **alinhado ao índice de cada ticker** em close_wide
     signals: Dict[str, Dict[str, pd.Series]] = {}
     for t in close_wide.columns:
-        e = entries[t].astype(bool)
-        x = exits[t].astype(bool)
+        e = entries.get(t, pd.Series(False, index=exp_ret.index)).reindex(close_wide.index, fill_value=False)
+        x = exits.get(t, pd.Series(False, index=exp_ret.index)).reindex(close_wide.index, fill_value=False)
+        signals[t] = {"entries": e.astype(bool), "exits": x.astype(bool)}
+
         if debug:
-            print(f"DEBUG {t}: entries={int(e.sum())} exits={int(x.sum())}")
-        signals[t] = {"entries": e, "exits": x}
+            print(f"[signals] {t}: entries={int(e.sum())} exits={int(x.sum())}")
 
     return signals

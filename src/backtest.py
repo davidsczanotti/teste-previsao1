@@ -127,7 +127,16 @@ def run_backtest(
             # alinha e passa Series de shares por barra
             kwargs["size"] = size_wide[t].reindex(close.index).fillna(method="ffill").fillna(0.0)
 
-        pf = vbt.Portfolio.from_signals(**kwargs)
+        pf = vbt.Portfolio.from_signals(
+            close,
+            entries=e,
+            exits=x,
+            fees=fees,
+            slippage=slippage,
+            init_cash=init_cash,
+            freq="B",
+        )
+
         portfolios[t] = pf
 
         total_ret = _safe_total_return(pf)

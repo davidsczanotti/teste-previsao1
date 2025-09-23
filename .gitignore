@@ -30,3 +30,25 @@ cache/
 # Coverage / misc
 .coverage
 coverage.xml
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+.yfinance.cache/
+yfinance.cache
+
+# saídas do projeto
+reports/
+lightning_logs/
+release.zip
+
+# envs/poetry
+.venv/
+.env
+*.env
+
+# OS
+.DS_Store
+Thumbs.db
