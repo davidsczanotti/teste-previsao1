@@ -1,130 +1,105 @@
+# src/signals.py
 from __future__ import annotations
 
-from typing import Dict
+from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
 
 
-def _dedup_index_keep_last(s: pd.Series) -> pd.Series:
-    """
-    Remove duplicatas de índice mantendo o último valor.
-    Útil quando há previsões 'rolling' para a mesma data.
-    """
-    if s.index.has_duplicates:
-        # agrupa por timestamp e mantém o último valor reportado
-        s = s.groupby(level=0).last()
-    return s
+def _pivot_yhat_wide(forecast_df: pd.DataFrame) -> pd.DataFrame:
+    if forecast_df is None or not isinstance(forecast_df, pd.DataFrame):
+        raise ValueError("forecast_df precisa ser DataFrame com ['unique_id','ds',<yhat_col>].")
 
+    df = forecast_df.copy()
+    df["ds"] = pd.to_datetime(df["ds"])
+    if "unique_id" not in df.columns or "ds" not in df.columns:
+        raise ValueError("forecast_df precisa conter 'unique_id' e 'ds'.")
 
-def _as_bool_series(x: pd.Series, index: pd.Index) -> pd.Series:
-    """Garante série booleana alinhada ao índice alvo."""
-    if x is None:
-        out = pd.Series(False, index=index)
-    else:
-        out = x.reindex(index, fill_value=False)
-    if out.dtype != bool:
-        out = out.astype(bool)
-    return out
+    ycol = None
+    for c in ("y_hat", "NHITS", "yhat", "forecast", "prediction", "y"):
+        if c in df.columns:
+            ycol = c
+            break
+    if ycol is None:
+        raise ValueError(f"Coluna de previsão não encontrada. Colunas: {list(df.columns)}")
+
+    wide = df.pivot(index="ds", columns="unique_id", values=ycol).sort_index()
+    return wide
 
 
 def build_signals_from_forecast(
+    forecast_df: pd.DataFrame,
     close_wide: pd.DataFrame,
-    yhat_df: pd.DataFrame,
-    horizon: int = 5,
-    exp_thresh: float = 0.003,
+    *,
+    exp_thresh: float = 0.002,
+    consec: int = 1,
+    trend_sma: Optional[int] = None,
+    only_non_overlapping: bool = True,
+    # NOVO: limiar dinâmico
+    dyn_thresh_k: Optional[float] = None,
+    vol_window: int = 20,
+    # logs
+    debug: bool = True,
+    **kwargs,
 ) -> Dict[str, Dict[str, pd.Series]]:
-    """
-    Constrói sinais de entrada/saída por ticker a partir das previsões (yhat_df).
+    if close_wide is None or not isinstance(close_wide, pd.DataFrame):
+        raise ValueError("'close_wide' precisa ser DataFrame (colunas=tickers, índice=datetime).")
 
-    Estratégia simples (baseline):
-      - Para cada data t, com preço atual P_t e previsão y_hat_t (próximo candle/curto prazo),
-        calcula-se retorno esperado R_exp = y_hat_t / P_t - 1.
-      - entries = R_exp > +exp_thresh
-      - exits   = R_exp < -exp_thresh
+    yhat_wide = _pivot_yhat_wide(forecast_df)
+    yhat_wide = yhat_wide.reindex(close_wide.index)
 
-    Observações importantes:
-      • NÃO aplicamos execução aqui. O no-lookahead é garantido depois, no backtest,
-        com shift(1) nas séries de entries/exits.
-      • Tratamos duplicatas de 'ds' no yhat_df (mantemos o último valor por data).
-      • Alinhamos tudo no índice de preços do ticker para evitar reindex com duplicatas.
+    exp_ret = (yhat_wide - close_wide) / close_wide
 
-    Parâmetros
-    ----------
-    close_wide : DataFrame
-        Fechamentos, colunas = tickers, índice = datas.
-    yhat_df : DataFrame
-        Colunas esperadas: ['unique_id', 'ds', 'y_hat'].
-    horizon : int
-        Horizonte de previsão (não usado explicitamente aqui, mas mantido para compatibilidade).
-    exp_thresh : float
-        Limiar absoluto de retorno esperado para acionar sinal.
+    # --- limiar (fixo OU dinâmico) ---
+    if dyn_thresh_k is not None:
+        # vol diária realizada
+        vol = close_wide.pct_change().rolling(window=vol_window, min_periods=vol_window).std()
+        thr = (dyn_thresh_k * vol).clip(lower=1e-5)  # piso pequeno para não zerar
+        entries = exp_ret > thr
+        exits = exp_ret < -thr
+    else:
+        entries = exp_ret > exp_thresh
+        exits = exp_ret < -exp_thresh
 
-    Retorna
-    -------
-    dict
-        {ticker: {"entries": Series[bool], "exits": Series[bool]}}
-    """
-    if not {"unique_id", "ds", "y_hat"}.issubset(yhat_df.columns):
-        raise ValueError("yhat_df deve conter as colunas: 'unique_id', 'ds', 'y_hat'.")
+    if consec and consec > 1:
+        entries = entries & (entries.rolling(window=consec, min_periods=consec).sum() >= consec)
+        exits = exits & (exits.rolling(window=consec, min_periods=consec).sum() >= consec)
 
-    # garantir tipos
-    yhat_df = yhat_df.copy()
-    yhat_df["ds"] = pd.to_datetime(yhat_df["ds"])
-    yhat_df = yhat_df.sort_values(["unique_id", "ds"])
+    if trend_sma and trend_sma > 0:
+        sma = close_wide.rolling(window=int(trend_sma), min_periods=int(trend_sma)).mean()
+        entries = entries & (close_wide > sma)
+        # exits = exits | (close_wide < sma)  # opcional
+
+    entries = entries.fillna(False).astype(bool)
+    exits = exits.fillna(False).astype(bool)
+
+    # Executar no próximo candle
+    entries = entries.shift(1, fill_value=False)
+    exits = exits.shift(1, fill_value=False)
+
+    if only_non_overlapping:
+        cleaned = {}
+        for t in close_wide.columns:
+            e = entries[t].to_numpy(copy=True)
+            x = exits[t].to_numpy(copy=True)
+            out = np.zeros_like(e, dtype=bool)
+            in_pos = False
+            for i in range(e.shape[0]):
+                if not in_pos and e[i]:
+                    out[i] = True
+                    in_pos = True
+                if in_pos and x[i]:
+                    in_pos = False
+            cleaned[t] = pd.Series(out, index=entries.index)
+        entries = pd.DataFrame(cleaned)
 
     signals: Dict[str, Dict[str, pd.Series]] = {}
-
-    for ticker in close_wide.columns:
-        # 1) Série de preços desse ticker
-        px = close_wide[ticker].dropna()
-        if px.empty:
-            continue
-
-        # 2) Previsões desse ticker
-        f_tk = yhat_df[yhat_df["unique_id"] == ticker]
-        if f_tk.empty:
-            # sem previsão → sem sinal
-            signals[ticker] = {
-                "entries": pd.Series(False, index=px.index),
-                "exits": pd.Series(False, index=px.index),
-            }
-            continue
-
-        # 3) série prevista y_hat por data
-        y_series = (
-            f_tk[["ds", "y_hat"]]
-            .dropna()
-            .drop_duplicates(subset=["ds"], keep="last")  # se vier duplicado
-            .set_index("ds")["y_hat"]
-        )
-
-        # 4) se ainda houver duplicata de índice por algum motivo, consolidar
-        y_series = _dedup_index_keep_last(y_series)
-
-        # 5) alinhar ao índice de preços (sem duplicatas)
-        if y_series.index.has_duplicates:
-            # segurança extra (em teoria, já tratamos)
-            y_series = y_series[~y_series.index.duplicated(keep="last")]
-
-        # agora podemos reindexar; prever para datas sem previsão vira NaN
-        y_series = y_series.reindex(px.index)
-
-        # 6) retorno esperado
-        #    Obs: se y_hat vier como preço “no mesmo timestamp t”, o backtest fará shift(1)
-        #    para executar no próximo candle.
-        with np.errstate(divide="ignore", invalid="ignore"):
-            r_exp = y_series / px - 1.0
-
-        # 7) sinais (booleans) com limiar
-        entries = (r_exp > +exp_thresh).fillna(False)
-        exits = (r_exp < -exp_thresh).fillna(False)
-
-        # 8) garantir dtype/índice correto
-        entries = _as_bool_series(entries, px.index)
-        exits = _as_bool_series(exits, px.index)
-
-        # 9) sem prints aqui (debug centralizado no backtest)
-        signals[ticker] = {"entries": entries, "exits": exits}
+    for t in close_wide.columns:
+        e = entries[t].astype(bool)
+        x = exits[t].astype(bool)
+        if debug:
+            print(f"DEBUG {t}: entries={int(e.sum())} exits={int(x.sum())}")
+        signals[t] = {"entries": e, "exits": x}
 
     return signals

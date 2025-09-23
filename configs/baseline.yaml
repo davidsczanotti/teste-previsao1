@@ -1,0 +1,32 @@
+# configs/baseline.yaml
+data:
+  tickers: ["VALE3.SA", "PETR4.SA", "BOVA11.SA", "ITUB4.SA"]
+  start: "2020-01-01"
+model:
+  horizon: 5
+  input_size: 60
+  n_windows: 120
+  step_size: 1
+  max_steps: 200
+  seed: 1
+  lead_for_signal: 1
+signals:
+  exp_thresh: 0.0005      # se dyn_thresh_k não for setado, usa fixo
+  consec: 1
+  trend_sma: null         # ex.: 50 para filtrar por tendência
+  dyn_thresh_k: 0.8       # coeficiente do limiar dinâmico (k * vol)
+  vol_window: 20          # janela da volatilidade (em barras)
+backtest:
+  init_cash: 100000
+  fees: 0.0005
+  slippage: 0.0005
+  direction: "longonly"
+  only_non_overlapping: true
+  risk_per_trade: null    # ex.: 0.005 (=0.5% do capital) -> calcula shares ~ 0.5%/vol
+tracking:
+  use_mlflow: false
+  mlflow_experiment: "baseline"
+  mlflow_uri: null
+experiment:
+  name: "nhits_baseline"
+  notes: "baseline com lead=1 e limiar dinâmico"

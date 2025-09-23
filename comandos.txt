@@ -20,10 +20,9 @@ docker-compose up --build
 poetry add python-dotenv
 poetry add black djlint --group dev
 
-git pull origin main &&  docker compose -f docker-compose.prod.yml up -d && docker compose -f docker-compose.prod.yml up -d --build
-
-git pull origin main &&  docker compose -f docker-compose.prod.yml down -v && docker compose -f docker-compose.prod.yml up -d --build
-clear && docker compose -f docker-compose.prod.yml logs redis web worker -f
+poetry run python scripts/make_zip.py 
+poetry run python scripts/clean_repo.py
+poetry run python -m src.run_experiment --config configs/baseline.yaml
 
 
 wsl->git push -u origin main

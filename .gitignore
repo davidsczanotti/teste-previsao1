@@ -1,0 +1,32 @@
+# Byte-compiled / caches
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Build / dist
+build/
+dist/
+.eggs/
+*.egg-info/
+
+# Experiments / artifacts
+reports/
+lightning_logs/
+mlruns/
+
+# Data caches (se existir)
+data/
+cache/
+
+# Coverage / misc
+.coverage
+coverage.xml
