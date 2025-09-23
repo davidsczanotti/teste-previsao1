@@ -12,15 +12,17 @@ try:
     import vectorbt as vbt
 except Exception as e:
     raise RuntimeError(
-        "vectorbt não está instalado/compatível. " "Verifique sua versão (no seu projeto usa 0.28.1)."
+        "vectorbt não está instalado/compatível. "
+        "Verifique sua versão (no projeto usamos 0.28.x)."
     ) from e
 
 
-# =========================
-# Helpers de alinhamento
-# =========================
+# ==========================
+# Utilidades internas
+# ==========================
+
 def _ensure_bool_series(s: pd.Series | None, index: pd.Index) -> pd.Series:
-    """Garante Series booleana, alinhada ao índice de preços (index)."""
+    """Garante Series booleana alinhada ao índice fornecido."""
     if s is None:
         return pd.Series(False, index=index)
     out = s.reindex(index, fill_value=False)
@@ -29,105 +31,132 @@ def _ensure_bool_series(s: pd.Series | None, index: pd.Index) -> pd.Series:
     return out
 
 
-# =========================
-# Helpers de métricas (sem warnings de freq)
-# =========================
-def _infer_periods_per_year(idx: pd.Index) -> int:
-    """
-    Tenta inferir períodos/ano a partir da frequência do índice.
-    Padrão: 252 (dias úteis).
-    """
-    if not isinstance(idx, pd.DatetimeIndex) or len(idx) < 3:
-        return 252
-
-    # tenta inferir freq
+def _safe_total_return(pf) -> float:
+    """Total Return em % (robusto entre versões)."""
+    # 1) API moderna
     try:
-        freq = pd.infer_freq(idx)
+        val = pf.total_return()
+        val = float(val)  # fração (ex.: 0.34)
+        return val * 100.0
     except Exception:
-        freq = None
-
-    if freq is None:
-        # fallback por densidade de datas: assume diário útil
-        return 252
-
-    freq = freq.upper()
-    if freq.startswith("B") or freq.startswith("D"):
-        return 252
-    if freq.startswith("W"):
-        return 52
-    if freq.startswith("M"):
-        return 12
-    if freq.startswith("Q"):
-        return 4
-    if freq.startswith("A") or freq.startswith("Y"):
-        return 1
-    # fallback
-    return 252
+        pass
+    # 2) via stats
+    try:
+        stats = pf.stats(freq="D")
+        # pode vir como chave numérica ou string
+        for k in ("Total Return [%]", "Total Return"):
+            if k in stats:
+                v = float(stats[k])
+                # Se for fração (0.34), transforma em %
+                return v * 100.0 if abs(v) <= 1.0 else v
+    except Exception:
+        pass
+    return np.nan
 
 
-def _compute_total_return(returns: pd.Series) -> float:
-    """Total return (%) a partir de retornos periódicos."""
-    if returns.empty:
-        return np.nan
-    equity = (1.0 + returns.fillna(0.0)).cumprod()
-    return float((equity.iloc[-1] - 1.0) * 100.0)
+def _safe_sharpe(pf) -> float:
+    """Sharpe Ratio (robusto, com freq diária para evitar warnings)."""
+    # 1) API direta
+    for getter in (
+        lambda: float(pf.sharpe_ratio(freq="D")),
+        lambda: float(pf.sharpe_ratio()),  # fallback
+    ):
+        try:
+            v = getter()
+            if np.isfinite(v):
+                return v
+        except Exception:
+            pass
+    # 2) via stats
+    try:
+        stats = pf.stats(freq="D")
+        for k in ("Sharpe Ratio", "Sharpe Ratio "):
+            if k in stats and np.isfinite(stats[k]):
+                return float(stats[k])
+    except Exception:
+        pass
+    return np.nan
 
 
-def _compute_sharpe(returns: pd.Series, periods_per_year: int, rf_per_period: float = 0.0) -> float:
-    """
-    Sharpe anualizado (excess return / std * sqrt(periods_per_year)).
-    rf_per_period: taxa livre de risco por período (0 por simplicidade).
-    """
-    r = returns.dropna()
-    if r.empty:
-        return np.nan
-    excess = r - rf_per_period
-    mu = excess.mean()
-    sigma = excess.std(ddof=0)
-    if sigma == 0 or not np.isfinite(sigma):
-        return np.nan
-    return float(mu / sigma * np.sqrt(periods_per_year))
+def _safe_sortino(pf) -> float:
+    """Sortino Ratio (opcional, usado se desejar estender o relatório)."""
+    try:
+        return float(pf.sortino_ratio(freq="D"))
+    except Exception:
+        try:
+            stats = pf.stats(freq="D")
+            for k in ("Sortino Ratio", "Sortino Ratio "):
+                if k in stats and np.isfinite(stats[k]):
+                    return float(stats[k])
+        except Exception:
+            pass
+    return np.nan
 
 
-def _compute_max_drawdown(returns: pd.Series) -> float:
-    """Max Drawdown (%) como valor positivo (magnitude)."""
-    if returns.empty:
-        return np.nan
-    curve = (1.0 + returns.fillna(0.0)).cumprod()
-    peak = curve.cummax()
-    dd = 1.0 - (curve / peak).clip(upper=1.0)
-    mdd = dd.max()
-    return float(mdd * 100.0)
+def _safe_max_dd(pf) -> float:
+    """Max Drawdown como percentual **positivo** (robusto entre versões)."""
+    # 1) API direta
+    try:
+        val = pf.max_drawdown()  # pode vir como fração positiva (0.2) ou negativa
+        val = float(val)
+        # normaliza para percentual positivo
+        if abs(val) <= 1.0:
+            return abs(val) * 100.0
+        return abs(val)
+    except Exception:
+        pass
+    # 2) via stats
+    try:
+        stats = pf.stats(freq="D")
+        for k in ("Max Drawdown [%]", "Max Drawdown"):
+            if k in stats:
+                v = float(stats[k])
+                # normaliza para percentual positivo
+                if abs(v) <= 1.0:
+                    return abs(v) * 100.0
+                return abs(v)
+    except Exception:
+        pass
+    return np.nan
 
 
 def _win_rate_and_trades(pf) -> Tuple[float, int]:
-    """
-    Win Rate (%) e número de trades de forma robusta a diferenças de versão.
-    """
+    """Win rate (%) e nº de trades, lidando com diferenças de schema."""
     trades_n = 0
     win_rate = np.nan
+
+    # 1) Tabela legível
     try:
-        rec = pf.trades.records_readable  # DataFrame “legível”
-        trades_n = len(rec)
+        rec = pf.trades.records_readable  # DataFrame
+        trades_n = int(len(rec))
         if trades_n > 0:
-            pnl_col = "PnL" if "PnL" in rec.columns else ("Pnl" if "Pnl" in rec.columns else None)
-            if pnl_col is not None:
-                win_rate = (rec[pnl_col] > 0).mean() * 100.0
+            pnl_col = None
+            if "PnL" in rec.columns:
+                pnl_col = "PnL"
+            elif "Pnl" in rec.columns:
+                pnl_col = "Pnl"
+            if pnl_col:
+                win_rate = float((rec[pnl_col] > 0).mean() * 100.0)
     except Exception:
+        pass
+
+    # 2) Fallback: ndarray estruturado
+    if not np.isfinite(win_rate):
         try:
-            rec = pf.trades.records  # np.ndarray estruturado
-            trades_n = len(rec)
+            rec = pf.trades.records  # np structured array
+            trades_n = int(len(rec))
             if trades_n > 0 and "pnl" in rec.dtype.names:
-                win_rate = (rec["pnl"] > 0).mean() * 100.0
+                win_rate = float((rec["pnl"] > 0).mean() * 100.0)
         except Exception:
             pass
 
-    return float(win_rate), int(trades_n)
+    return (win_rate if np.isfinite(win_rate) else np.nan), trades_n
 
 
-# =========================
+# ==========================
 # Função principal
-# =========================
+# ==========================
+
 def run_backtest(
     close_wide: pd.DataFrame,
     signals: Dict[str, Dict[str, pd.Series]],
@@ -139,27 +168,30 @@ def run_backtest(
     report_path: str | os.PathLike = "reports/summary_baseline.csv",
 ) -> Tuple[pd.DataFrame, Dict[str, "vbt.portfolio.base.Portfolio"]]:
     """
-    Backtest por ticker aplicando EXECUÇÃO NO PRÓXIMO CANDLE (shift(1))
+    Roda o backtest por ticker aplicando o *EXECUTE-NO-PRÓXIMO-CANDLE* (shift(1))
     nos sinais de entrada/saída, já alinhados ao índice de preços do ticker.
 
     Parameters
     ----------
-    close_wide : DataFrame  (colunas = tickers, índice = datetime)
-    signals    : { ticker: {"entries": Series[bool], "exits": Series[bool]} }
+    close_wide : DataFrame
+        Preços de fechamento em colunas (tickers) e índice temporal.
+    signals : dict
+        { ticker: {"entries": Series[bool], "exits": Series[bool]} }
+        As séries podem ter índice diferente do de preços; aqui alinhamos.
     init_cash, fees, slippage, direction : parâmetros do vectorbt
-    save_trades : salva trades em reports/trades_{ticker}.csv
+    save_trades : salva trades individuais em reports/trades_{ticker}.csv
     report_path : caminho do CSV de resumo
 
     Returns
     -------
-    summary_df : DataFrame métricas por ticker
-    portfolios : {ticker: Portfolio}
+    summary_df : DataFrame com métricas agregadas por ticker
+    portfolios : dict {ticker: Portfolio}
     """
     Path("reports").mkdir(parents=True, exist_ok=True)
 
     tickers = [t for t in close_wide.columns if t in signals]
     rows = []
-    portfolios = {}
+    portfolios: Dict[str, vbt.portfolio.base.Portfolio] = {}
 
     for t in tickers:
         close = close_wide[t].dropna()
@@ -167,13 +199,18 @@ def run_backtest(
             continue
 
         # 1) alinhar sinais ao índice de preços
-        e = _ensure_bool_series(signals[t].get("entries"), close.index)
-        x = _ensure_bool_series(signals[t].get("exits"), close.index)
+        e_raw = signals[t].get("entries", None)
+        x_raw = signals[t].get("exits", None)
 
-        # 2) EXECUTAR NO PRÓXIMO CANDLE (evita look-ahead)
+        e = _ensure_bool_series(e_raw, close.index)
+        x = _ensure_bool_series(x_raw, close.index)
+
+        # 2) *** EXECUTAR NO PRÓXIMO CANDLE ***
+        # (evita look-ahead: o sinal gerado em t só é operado em t+1)
         e = e.shift(1, fill_value=False)
         x = x.shift(1, fill_value=False)
 
+        # (debug leve, uma única linha por ticker)
         print(f"DEBUG {t}: entries={int(e.sum())} exits={int(x.sum())}")
 
         # 3) construir Portfólio
@@ -185,17 +222,14 @@ def run_backtest(
             fees=fees,
             slippage=slippage,
             direction=direction,
-            accumulate=True,  # mantém posição até sinal de saída
+            accumulate=True,   # mantém posição enquanto não sair
         )
         portfolios[t] = pf
 
-        # 4) métricas (manuais para evitar warnings de freq)
-        periods_per_year = _infer_periods_per_year(close.index)
-        returns = pf.returns()  # série de retornos por período
-
-        total_ret = _compute_total_return(returns)
-        sharpe = _compute_sharpe(returns, periods_per_year)
-        max_dd = _compute_max_drawdown(returns)
+        # 4) métricas
+        total_ret = _safe_total_return(pf)
+        sharpe = _safe_sharpe(pf)
+        max_dd = _safe_max_dd(pf)
         win_rate, n_trades = _win_rate_and_trades(pf)
 
         rows.append(
@@ -204,7 +238,7 @@ def run_backtest(
                 "Total Return [%]": total_ret,
                 "Sharpe Ratio": sharpe,
                 "Win Rate [%]": win_rate,
-                "Max Drawdown [%]": max_dd,  # positivo
+                "Max Drawdown [%]": max_dd,  # sempre positivo
                 "Trades": n_trades,
             }
         )
@@ -217,23 +251,16 @@ def run_backtest(
             except Exception:
                 pass
 
-    # resumo
+    # montar resumo
     if rows:
         summary_df = pd.DataFrame.from_records(rows).set_index("ticker")
-        summary_df = summary_df.sort_values("Total Return [%]", ascending=False)
     else:
         summary_df = pd.DataFrame(
             columns=["Total Return [%]", "Sharpe Ratio", "Win Rate [%]", "Max Drawdown [%]", "Trades"]
         )
 
-    # salvar CSV
+    # salvar
     Path(report_path).parent.mkdir(parents=True, exist_ok=True)
     summary_df.to_csv(report_path)
-
-    # print amigável
-    pd.options.display.float_format = lambda x: f"{x:,.6f}"
-    print("\n==== RESUMO ====\n")
-    print(summary_df)
-    print(f"\nRelatório salvo em: {report_path}")
 
     return summary_df, portfolios
