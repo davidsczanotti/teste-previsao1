@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-# IMPORTS RELATIVOS (funcionam com `python -m src.run_experiment`)
+# Imports relativos (roda com: python -m src.run_experiment)
 from .ingest import get_prices
 from .features import make_long_df, add_ta_features
 from .models_ts import train_predict_nhits
@@ -43,6 +43,7 @@ def main() -> None:
     # 1) Dados
     print("1) Baixando dados...")
     close_wide: pd.DataFrame = get_prices(tickers=args.tickers, start=args.start)
+    # ordenar colunas só para deixar estável
     close_wide = close_wide[sorted(close_wide.columns)]
     print(close_wide.tail(5))
 
@@ -58,7 +59,6 @@ def main() -> None:
         h=args.horizon,
         max_steps=args.max_steps,
         n_windows=None,  # deixe None para janela padrão (rolling básico)
-        use_gpu=False,
         verbose=True,
     )
     print(yhat_df.tail(5))
@@ -69,7 +69,7 @@ def main() -> None:
         close_wide=close_wide,
         yhat_df=yhat_df,
         horizon=args.horizon,
-        exp_thresh=0.003,
+        exp_thresh=0.003,  # seu limiar de expectativa de retorno
     )
 
     # 5) Backtest
