@@ -15,33 +15,19 @@ from .backtest import run_backtest
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Pipeline: dados -> features -> NHITS -> sinais -> backtest"
-    )
+    parser = argparse.ArgumentParser(description="Pipeline: dados -> features -> NHITS -> sinais -> backtest")
     parser.add_argument(
         "--tickers",
         nargs="+",
         default=["VALE3.SA", "PETR4.SA", "BOVA11.SA", "ITUB4.SA"],
         help="Lista de tickers (Yahoo/BR).",
     )
-    parser.add_argument(
-        "--start", type=str, default=None, help="Data inicial (YYYY-MM-DD). Opcional."
-    )
-    parser.add_argument(
-        "--horizon", type=int, default=5, help="Horizonte de previsão (h)."
-    )
-    parser.add_argument(
-        "--max-steps", type=int, default=300, help="Passos de treino (max_steps)."
-    )
-    parser.add_argument(
-        "--fees", type=float, default=0.0005, help="Taxa por trade (proporção)."
-    )
-    parser.add_argument(
-        "--slippage", type=float, default=0.0005, help="Slippage por trade (proporção)."
-    )
-    parser.add_argument(
-        "--init-cash", type=float, default=100_000.0, help="Capital inicial do backtest."
-    )
+    parser.add_argument("--start", type=str, default=None, help="Data inicial (YYYY-MM-DD). Opcional.")
+    parser.add_argument("--horizon", type=int, default=5, help="Horizonte de previsão (h).")
+    parser.add_argument("--max-steps", type=int, default=300, help="Passos de treino (max_steps).")
+    parser.add_argument("--fees", type=float, default=0.0005, help="Taxa por trade (proporção).")
+    parser.add_argument("--slippage", type=float, default=0.0005, help="Slippage por trade (proporção).")
+    parser.add_argument("--init-cash", type=float, default=100_000.0, help="Capital inicial do backtest.")
     parser.add_argument(
         "--report-path",
         type=str,
@@ -57,7 +43,6 @@ def main() -> None:
     # 1) Dados
     print("1) Baixando dados...")
     close_wide: pd.DataFrame = get_prices(tickers=args.tickers, start=args.start)
-    # garante ordenação de colunas por estética/consistência
     close_wide = close_wide[sorted(close_wide.columns)]
     print(close_wide.tail(5))
 
@@ -72,13 +57,10 @@ def main() -> None:
         long_df=long_df,
         h=args.horizon,
         max_steps=args.max_steps,
-        n_windows=None,         # deixar None para usar janela padrão (rolling)
-        random_seed=1,
+        n_windows=None,  # deixe None para janela padrão (rolling básico)
         use_gpu=False,
         verbose=True,
     )
-    # Mostra só as últimas linhas de um ticker como você costuma ver
-    # (normalmente VALE3.SA aparece no log)
     print(yhat_df.tail(5))
 
     # 4) Sinais a partir das previsões
@@ -87,7 +69,7 @@ def main() -> None:
         close_wide=close_wide,
         yhat_df=yhat_df,
         horizon=args.horizon,
-        exp_thresh=0.003,  # mesmo padrão que você já vinha usando
+        exp_thresh=0.003,
     )
 
     # 5) Backtest
