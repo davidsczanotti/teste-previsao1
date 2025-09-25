@@ -1,0 +1,43 @@
+data:
+  tickers: ["VALE3.SA", "PETR4.SA", "BOVA11.SA", "ITUB4.SA"]
+  start: "2015-01-01"
+model:
+  horizon: 5
+  input_size: 60
+  n_windows: 24
+  step_size: 5
+  max_steps: 50
+  seed: 1
+  lead_for_signal: 2
+signals:
+  exp_thresh: 0.0
+  consec: 1
+  trend_sma: 100
+  dyn_thresh_k: 0.8
+  vol_window: 20
+  rsi_window: null
+  rsi_min: null
+  bb_window: null
+  bb_k: 2.0
+  atr_window: 14
+  atr_stop_k: 1.5
+  cooldown_bars: 0
+  max_hold_bars: null
+backtest:
+  init_cash: 100000
+  fees: 0.0005
+  slippage: 0.0005
+  direction: "longonly"
+  only_non_overlapping: true
+  risk_per_trade: null
+tracking:
+  use_mlflow: false
+  mlflow_experiment: "final"
+  mlflow_uri: null
+registry:
+  enabled: true
+  path: "reports/experiments.sqlite"
+experiment:
+  name: "final_A"
+  notes: "lead=2, SMA100, consec=1, dyn_k=0.8, exp=0.0, ATR(14,1.5)"
+

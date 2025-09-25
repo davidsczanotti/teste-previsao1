@@ -157,6 +157,47 @@ manter o baseline original.
 
 ---
 
+## Perfis Finais (consolidados)
+
+Perfis recomendados a partir dos últimos experimentos (registry + grid):
+
+- Perfil A (retorno): lead=2, trend_sma=100, consec=1, dyn_k=0.8, exp=0.0, ATR(14,1.5)
+- Perfil B (eficiência): Perfil A + risk_per_trade=0.005
+- Variante A2 (robustez): Perfil A + cooldown_bars=3 + exp_thresh=0.0002
+
+Médias agregadas (por ticker) e duração média dos trades:
+
+| profile | avg_total_return | avg_sharpe | avg_win_rate | avg_max_drawdown | total_trades | mean_trade_duration_days |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| A_ATR | 4.3174 | 32.4708 | 100.0 | 0.0 | 9 | 4.25 |
+| B_ATR_risk005 | 2.0326 | 24.9794 | 100.0 | 0.0 | 10 | 12.5667 |
+| A2_ATR_cooldown3_exp0002 | 3.1102 | 26.7696 | 100.0 | 0.0 | 7 | 4.1111 |
+
+Notas:
+- O sizing por risco (B) aumenta a eficiência (Sharpe) e alonga a duração média das posições.
+- Cooldown+exp_thresh (A2) reduz reentradas rápidas e falsos positivos sem secar totalmente os sinais.
+
+Arquivos de referência:
+- Resumos: `reports/summary_final_A.csv`, `reports/summary_final_B.csv`, `reports/summary_final_A_cooldown3_exp0002.csv`
+- Comparativos: `reports/compare_A_B_A2_by_ticker.csv`, `reports/summary_compare_A_B_A2.csv`
+- Trades por perfil: `reports/trades_A_{TICKER}.csv`, `reports/trades_B_{TICKER}.csv`, `reports/trades_A2_{TICKER}.csv`
+
+Como rodar diretamente:
+```bash
+poetry run python -m src.run_experiment --config configs/final_A.yaml
+poetry run python -m src.run_experiment --config configs/final_B.yaml
+```
+
+Visualização rápida (Total Return [%] por ticker):
+
+![Retornos por perfil](reports/returns_by_profile.png)
+
+Visualização rápida (Sharpe Ratio por ticker):
+
+![Sharpe por perfil](reports/sharpe_by_profile.png)
+
+---
+
 ## Smoke test (anti-regressão do backtest)
 
 ```bash
@@ -196,6 +237,14 @@ OK ✅  Shift(1) aplicado corretamente e métricas básicas OK.
 5. **Relatório HTML completo** com curva de capital, distribuição de retornos e heatmaps de performance por parâmetro.
 
 ---
+
+## TODO / Próximos passos imediatos
+
+- scripts/run_universe_scan.py: ler `configs/universe_b3.txt`, varrer por batches (scan leve), rankear por Sharpe/Retorno, salvar no registry e `reports/universe_rankings.csv`.
+- configs/universe_b3.txt: placeholder com alguns tickers `.SA` (você pode substituir pelo seu universo).
+- Backtest de portfólio combinado (opcional): modo que agrega em uma única curva de capital (mock capital) a partir das posições por ticker.
+- configs/forward_test.yaml: job de forward test com período recente fixo usando os perfis A/B consolidados.
+
 
 ## Perguntas frequentes
 

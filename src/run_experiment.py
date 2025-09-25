@@ -290,6 +290,7 @@ def main(argv=None):
         save_trades=True,
         report_path=report_path,
         size_wide=size_wide,
+        aggregate_portfolio=True,
     )
 
     print("\n==== RESUMO ====\n")

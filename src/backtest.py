@@ -157,6 +157,8 @@ def run_backtest(
     report_path: str | os.PathLike = "reports/summary_baseline.csv",
     # NOVO: tamanho de posição por barra (shares); DataFrame index=tempo, cols=tickers
     size_wide: Optional[pd.DataFrame] = None,
+    # Agregar um portfólio combinado (curva única) a partir dos retornos médios
+    aggregate_portfolio: bool = False,
 ) -> Tuple[pd.DataFrame, Dict[str, "vbt.portfolio.base.Portfolio"]]:
     Path("reports").mkdir(parents=True, exist_ok=True)
 
@@ -238,5 +240,27 @@ def run_backtest(
 
     Path(report_path).parent.mkdir(parents=True, exist_ok=True)
     summary_df.to_csv(report_path)
+
+    # Opcional: gerar curva de capital combinada com média simples dos retornos por ticker
+    if aggregate_portfolio and portfolios:
+        # alinhar retornos por data, preenchendo ausentes com 0 (sem posição)
+        def _get_returns(pf):
+            try:
+                r = pf.returns if not callable(pf.returns) else pf.returns()
+            except Exception:
+                # fallback via .trades ou .stats não é ideal; retorna série vazia
+                return pd.Series([], dtype=float)
+            return r
+
+        rets_df = pd.DataFrame(
+            {t: _get_returns(pf).reindex(close_wide.index).fillna(0.0) for t, pf in portfolios.items()}
+        )
+        if not rets_df.empty:
+            # média simples por dia
+            port_rets = rets_df.mean(axis=1)
+            equity = (1.0 + port_rets).cumprod() * init_cash
+            out = pd.DataFrame({"date": equity.index, "equity": equity.values})
+            out_path = Path(report_path).parent / "portfolio_combined.csv"
+            out.to_csv(out_path, index=False)
 
     return summary_df, portfolios

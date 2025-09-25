@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Paper Trading – Frontend</title>
+    <style>
+      body { font-family: system-ui, Arial, sans-serif; margin: 20px; }
+      .row { display: flex; gap: 24px; }
+      .col { flex: 1; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #ddd; padding: 6px 8px; }
+      th { background: #f2f2f2; }
+      .flash { padding: 8px 10px; margin-bottom: 10px; border-radius: 4px; }
+      .flash.success { background: #eaf7ea; color: #1c5c1c; }
+      .flash.error { background: #fdecea; color: #8a1f15; }
+      .card { border: 1px solid #ddd; padding: 12px; border-radius: 6px; }
+      .muted { color: #666; font-size: 0.9em; }
+    </style>
+  </head>
+  <body>
+    <h1>Paper Trading – Execução por Ticker</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for cat, msg in messages %}
+          <div class="flash {{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="row">
+      <div class="col">
+        <div class="card">
+          <form method="post">
+            <label> Ticker:
+              <select name="ticker">
+                {% for t in tickers %}
+                  <option value="{{t}}">{{t}}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <br/>
+            <label> Aporte (init_cash):
+              <input type="number" name="aporte" value="100000" step="1000" />
+            </label>
+            <br/>
+            <label> Início (start):
+              <input type="date" name="start" value="2018-01-01" />
+            </label>
+            <br/>
+            <label> Perfil:
+              <select name="profile">
+                <option value="A">A (retorno)</option>
+                <option value="B" selected>B (eficiência – sizing 0.5%)</option>
+              </select>
+            </label>
+            <br/>
+            <button type="submit">Incluir</button>
+          </form>
+          <p class="muted">Perfil A: lead=2, SMA100, dyn_k=0.8, exp=0.0, ATR(14,1.5). Perfil B: A + risk_per_trade=0.005.</p>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card">
+          <h3>Últimos runs (registry)</h3>
+          {% if recent is not none and recent.shape[0] > 0 %}
+            <table>
+              <tr>
+                {% for c in recent.columns %}
+                  <th>{{c}}</th>
+                {% endfor %}
+              </tr>
+              {% for _, row in recent.iterrows() %}
+                <tr>
+                  {% for c in recent.columns %}
+                    <td>{{ row[c] }}</td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            </table>
+          {% else %}
+            <p class="muted">Sem runs recentes.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {% if result %}
+      <h2>Resultado – {{ result.ticker }}</h2>
+      <p>Resumo: <code>{{ result.summary_path }}</code><br/>Trades: <code>{{ result.trades_path }}</code></p>
+      {% if result.row %}
+        <table>
+          <tr>
+            {% for k in result.row.keys() %}
+              <th>{{k}}</th>
+            {% endfor %}
+          </tr>
+          <tr>
+            {% for v in result.row.values() %}
+              <td>{{v}}</td>
+            {% endfor %}
+          </tr>
+        </table>
+      {% endif %}
+    {% endif %}
+
+  </body>
+  </html>
+
