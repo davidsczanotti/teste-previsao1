@@ -8,6 +8,8 @@ from typing import Dict, Tuple, Optional
 import numpy as np
 import pandas as pd
 
+from src.metrics import sharpe
+
 try:
     import vectorbt as vbt
 except Exception as e:
@@ -16,7 +18,7 @@ except Exception as e:
     ) from e
 
 
-def _ensure_bool_series(s: pd.Series, index: pd.Index) -> pd.Series:
+def _ensure_bool_series(s: Optional[pd.Series], index: pd.Index) -> pd.Series:
     if s is None:
         return pd.Series(False, index=index)
     out = s.reindex(index, fill_value=False)
@@ -47,6 +49,35 @@ def _safe_sharpe(pf) -> float:
                 return val
         except Exception:
             pass
+
+    # Fallback to trades Sharpe
+    try:
+        if hasattr(pf.trades, 'sharpe_ratio'):
+            val = pf.trades.sharpe_ratio()
+            if np.isfinite(val):
+                return float(val)
+    except Exception:
+        pass
+
+    # Custom fallback on trades PnL
+    try:
+        rec = pf.trades.records_readable
+        if len(rec) > 0:
+            pnl_col = "PnL" if "PnL" in rec.columns else "Pnl"
+            if pnl_col in rec.columns:
+                pnl = rec[pnl_col]
+                if len(pnl) > 1 and pnl.std() > 0:
+                    return sharpe(pnl / 100)  # assume daily returns from PnL %
+    except Exception:
+        pass
+
+    # Fallback custom on portfolio returns
+    try:
+        returns = pf.returns.dropna()
+        if len(returns) > 0 and returns.std() > 0:
+            return sharpe(returns)
+    except Exception:
+        pass
     return np.nan
 
 
@@ -57,7 +88,41 @@ def _safe_max_dd(pf) -> float:
         try:
             return abs(float(pf.stats()["Max Drawdown [%]"]))
         except Exception:
-            return np.nan
+            pass
+
+    # Fallback to trades Max DD
+    try:
+        if hasattr(pf.trades, 'max_drawdown'):
+            val = pf.trades.max_drawdown()
+            if np.isfinite(val):
+                return abs(float(val)) * 100.0
+    except Exception:
+        pass
+
+    # Custom fallback on trades PnL
+    try:
+        rec = pf.trades.records_readable
+        if len(rec) > 0:
+            pnl_col = "PnL" if "PnL" in rec.columns else "Pnl"
+            if pnl_col in rec.columns:
+                pnl = rec[pnl_col]
+                if len(pnl) > 0:
+                    cum_pnl = pnl.cumsum()
+                    drawdown = cum_pnl / cum_pnl.cummax() - 1
+                    return abs(drawdown.min()) * 100.0
+    except Exception:
+        pass
+
+    # Fallback custom on portfolio returns
+    try:
+        returns = pf.returns.dropna()
+        if len(returns) > 0:
+            cumrets = (1 + returns).cumprod()
+            drawdown = cumrets / cumrets.cummax() - 1
+            return abs(drawdown.min()) * 100.0
+    except Exception:
+        pass
+    return np.nan
 
 
 def _win_rate_and_trades(pf) -> Tuple[float, int]:
@@ -125,8 +190,9 @@ def run_backtest(
 
         if size_wide is not None and t in size_wide.columns:
             # alinha e passa Series de shares por barra
-            kwargs["size"] = size_wide[t].reindex(close.index).fillna(method="ffill").fillna(0.0)
+            kwargs["size"] = size_wide[t].reindex(close.index).ffill().fillna(0.0)
 
+        # from_signals com acumulação e (opcional) tamanho por barra
         pf = vbt.Portfolio.from_signals(
             close,
             entries=e,
@@ -135,6 +201,8 @@ def run_backtest(
             slippage=slippage,
             init_cash=init_cash,
             freq="B",
+            accumulate=True,
+            size=(size_wide[t].reindex(close.index).ffill().fillna(0.0) if (size_wide is not None and t in size_wide.columns) else None),
         )
 
         portfolios[t] = pf
@@ -172,4 +240,3 @@ def run_backtest(
     summary_df.to_csv(report_path)
 
     return summary_df, portfolios
-    

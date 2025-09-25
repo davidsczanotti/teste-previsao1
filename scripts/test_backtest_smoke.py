@@ -1,8 +1,11 @@
 # scripts/test_backtest_smoke.py
 import pandas as pd
 import numpy as np
+from pathlib import Path
 
 from src.backtest import run_backtest
+from src.config import Cfg
+from src.exp_store import log_run
 
 # ----- Dados de teste (10 dias úteis) -----
 dates = pd.date_range("2024-01-01", periods=10, freq="B")
@@ -106,3 +109,59 @@ mdd = summary.loc["TESTE.SA", "Max Drawdown [%]"]
 assert pd.isna(mdd) or mdd >= 0, f"MDD deveria ser >=0 ou NaN. Veio {mdd}"
 
 print("\nOK ✅  Shift(1) aplicado corretamente e métricas básicas OK.")
+
+# ----- Registry smoke (garante log_run funcionando) -----
+schema_cfg = Cfg.model_validate(
+    {
+        "data": {"tickers": ["TESTE.SA"], "start": "2024-01-01"},
+        "model": {
+            "horizon": 2,
+            "input_size": 5,
+            "n_windows": 1,
+            "step_size": 1,
+            "max_steps": 10,
+            "seed": 1,
+            "lead_for_signal": 1,
+        },
+        "signals": {
+            "exp_thresh": 0.0,
+            "consec": 1,
+            "trend_sma": None,
+            "dyn_thresh_k": None,
+            "vol_window": 5,
+            "rsi_window": None,
+            "rsi_min": None,
+            "bb_window": None,
+            "bb_k": 2.0,
+            "atr_window": None,
+            "atr_stop_k": None,
+            "cooldown_bars": 0,
+            "max_hold_bars": None,
+        },
+        "backtest": {
+            "init_cash": 10000,
+            "fees": 0.0,
+            "slippage": 0.0,
+            "direction": "longonly",
+            "only_non_overlapping": True,
+            "risk_per_trade": None,
+        },
+        "tracking": {"use_mlflow": False, "mlflow_experiment": "smoke", "mlflow_uri": None},
+        "registry": {"enabled": True, "path": "reports/experiments_smoke.sqlite"},
+        "experiment": {"name": "smoke", "notes": "smoke test"},
+    }
+)
+
+registry_path = Path(schema_cfg.registry.path)
+if registry_path.exists():
+    registry_path.unlink()
+
+log_run(
+    db_path=registry_path,
+    cfg=schema_cfg,
+    summary_df=summary,
+    report_path="reports/summary_smoke.csv",
+    git_hash="smoke",
+)
+assert registry_path.exists(), "Registry sqlite should be created by log_run"
+print("OK ✅  Registry logging funcionando.")

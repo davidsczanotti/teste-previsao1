@@ -39,6 +39,8 @@ def train_predict_nhits(
     max_steps: int = 300,
     seed: int = 1,
     start_padding_enabled: bool = True,
+    # Seleção de horizonte para geração de sinal (n passos à frente)
+    lead_for_signal: int = 1,
     # freq opcional
     freq: Optional[str] = None,
     # engole kwargs legados
@@ -110,6 +112,26 @@ def train_predict_nhits(
         fcst["ds"] = pd.to_datetime(fcst["ds"])
     if "cutoff" in fcst.columns:
         fcst["cutoff"] = pd.to_datetime(fcst["cutoff"])
+
+    # 6.1) Selecionar horizonte conforme lead_for_signal (quando houver cutoff)
+    # Para cada (unique_id, cutoff), ordena por ds e pega a n-ésima previsão.
+    if "cutoff" in fcst.columns:
+        if not isinstance(lead_for_signal, int) or lead_for_signal < 1:
+            raise ValueError("lead_for_signal deve ser inteiro >= 1")
+        fcst = fcst.sort_values(["unique_id", "cutoff", "ds"]).copy()
+        # índice do horizonte começa em 1
+        fcst["_lead"] = (
+            fcst.groupby(["unique_id", "cutoff"], sort=False).cumcount() + 1
+        )
+        before_lead = len(fcst)
+        fcst = fcst.loc[fcst["_lead"] == lead_for_signal]
+        after_lead = len(fcst)
+        if before_lead != after_lead:
+            removed_lead = before_lead - after_lead
+            # Log leve para entendimento (opcional)
+            print(f"[models_ts] lead_for_signal={lead_for_signal}: filtradas {removed_lead} linhas de outros horizontes.")
+        # não precisamos mais da coluna auxiliar
+        fcst = fcst.drop(columns=["_lead"], errors="ignore")
 
     # 7) detectar coluna de previsão
     pred_col = _detect_pred_col(fcst.columns, model_name_hint=nhits.__class__.__name__)

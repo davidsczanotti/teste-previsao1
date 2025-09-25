@@ -37,6 +37,13 @@ class SignalsCfg(BaseModel):
     # Filtros opcionais baseados em RSI
     rsi_window: Optional[int] = None
     rsi_min: Optional[float] = None
+    # Bollinger / ATR / gerenciamento de posição
+    bb_window: Optional[int] = None
+    bb_k: float = 2.0
+    atr_window: Optional[int] = None
+    atr_stop_k: Optional[float] = None
+    cooldown_bars: int = 0
+    max_hold_bars: Optional[int] = None
 
 
 class BacktestCfg(BaseModel):
@@ -54,6 +61,11 @@ class TrackingCfg(BaseModel):
     mlflow_uri: Optional[str] = None
 
 
+class RegistryCfg(BaseModel):
+    enabled: bool = False
+    path: str = "reports/experiments.sqlite"
+
+
 class ExperimentCfg(BaseModel):
     name: str = "run"
     notes: Optional[str] = None
@@ -65,6 +77,7 @@ class Cfg(BaseModel):
     signals: SignalsCfg
     backtest: BacktestCfg
     tracking: TrackingCfg = TrackingCfg()
+    registry: RegistryCfg = RegistryCfg()
     experiment: ExperimentCfg = ExperimentCfg()
 
 

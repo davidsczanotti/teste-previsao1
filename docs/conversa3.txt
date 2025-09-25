@@ -1,0 +1,373 @@
+# tactiq.io free youtube transcript
+# Recurrent Neural Networks | LSTM Price Movement Predictions For Trading Algorithms
+# https://www.youtube.com/watch/hpfQE0bTeA4
+
+00:00:00.160 hi today we're going to use recurrent
+00:00:02.399 neural networks and the lstm longshore
+00:00:05.040 term memory networks for price movements
+00:00:07.200 predictions it can be applied for forex
+00:00:09.360 stock markets or crypto prices we're
+00:00:11.440 going to write our code in python and if
+00:00:13.840 you are new to this channel the code can
+00:00:15.519 be downloaded from the link in the
+00:00:16.960 description below looking at the results
+00:00:19.119 the predicted price curve has a similar
+00:00:21.279 behavior as the real price movements and
+00:00:24.000 this can be very tempting if you are
+00:00:25.840 seeing this for the first time and you
+00:00:27.519 don't know what's behind this type of
+00:00:29.599 predictions so in this video we're going
+00:00:31.439 to review this together and see if it's
+00:00:33.760 worth our investment so the way we're
+00:00:36.000 doing this is first by defining our
+00:00:38.079 input parameters and these can be
+00:00:40.160 anything from price values technical
+00:00:42.079 indicators and custom indicators that
+00:00:44.960 you can include in the data frame we are
+00:00:47.440 looking to predict an output which
+00:00:49.920 obviously would be the price movement
+00:00:51.680 trend so in this particular example just
+00:00:54.320 to make things simple we will try to
+00:00:56.719 predict the next candle closing price so
+00:01:00.000 in other words if we are using the daily
+00:01:02.480 time frame we would like to predict
+00:01:04.479 tomorrow's closing price based on let's
+00:01:07.360 say the last few days data this is an
+00:01:09.600 example of how our data is presented in
+00:01:12.640 a typical data frame so we have the open
+00:01:15.520 price the high low close price and the
+00:01:17.759 adjusted closed price we have the date
+00:01:19.920 as an index in this case and the way the
+00:01:22.320 lstm model works it takes past data for
+00:01:26.159 example from the last four days if this
+00:01:28.320 is the daily time frame and it will try
+00:01:30.720 to predict this particular value over
+00:01:33.360 here which is the closing price of the
+00:01:36.079 next day obviously before trying the
+00:01:38.400 prediction phase we have to train the
+00:01:40.400 model and this is done by providing
+00:01:42.560 input and output data for the first set
+00:01:45.360 that we can see here then the second set
+00:01:48.320 of data then the third day for example
+00:01:50.880 we're trying to predict the third day in
+00:01:53.280 a row and so on until we reach the end
+00:01:55.759 of our training data set in this example
+00:01:58.560 we're showing only four input days you
+00:02:01.360 can increase this to six days for
+00:02:03.360 example or any number of days and see
+00:02:06.000 how the results are changing we're going
+00:02:08.239 to do this in a while in our python code
+00:02:10.800 so at the end the model requires
+00:02:13.040 two-dimensional input and our training
+00:02:15.920 data set is in fact three-dimensional
+00:02:18.560 taking into account the shape of the
+00:02:20.400 training data set if this is not clear
+00:02:22.800 for you at the moment it's fine because
+00:02:25.040 we're going to see things in detail in
+00:02:27.040 the coding part okay now let's jump to
+00:02:29.200 the coding part and see how the model
+00:02:30.959 predictions will go this is our jupiter
+00:02:33.200 notebook file we're going to start by
+00:02:35.440 importing modules that we are needing so
+00:02:38.000 numpy pandas matplotlib for plotting our
+00:02:41.040 curves and pandas ta technical analysis
+00:02:44.959 because we need the technical indicators
+00:02:47.280 in our data frame as well and the y
+00:02:49.760 finance just to download the data we're
+00:02:51.920 going to use for our analysis so here
+00:02:54.480 i'm downloading the russell 1000 stocks
+00:02:57.440 starting 2012 up to 2022 so this is 10
+00:03:01.040 years worth of data this is the daily
+00:03:03.120 time frame again we're using the daily
+00:03:05.200 time frame here because it's less noisy
+00:03:08.080 for our algorithm
+00:03:09.680 and this is the data frame that we are
+00:03:11.840 obtaining we have the open high low
+00:03:13.840 closing price and the adjusted close
+00:03:15.760 price as well as a volume column that it
+00:03:18.239 seems that it contains no valuable data
+00:03:20.879 for us next step is to add the technical
+00:03:24.319 indicators using the ta technical
+00:03:26.879 analysis
+00:03:28.080 module so we're using the rsi here i'm
+00:03:31.360 adding this
+00:03:32.640 into our data frame as a new column we
+00:03:35.040 have a fast medium and slow moving
+00:03:37.840 average as well so the length is are 20
+00:03:40.640 100 and 150 the length of the rsi is 15
+00:03:45.040 you can of course change these
+00:03:46.640 parameters and add other technical
+00:03:48.720 indicators to your liking so this is why
+00:03:51.200 i'm sharing the notebook file you can
+00:03:53.760 modify the python code as you wish then
+00:03:56.080 i'm adding my target
+00:03:58.560 column into my data frame so there are
+00:04:00.959 three ways of doing this it's either we
+00:04:03.280 are checking the difference of uh price
+00:04:06.319 between the current open and the future
+00:04:08.400 close price or we can proceed using
+00:04:10.400 classification approach checking if we
+00:04:12.879 are going up or down for example in
+00:04:14.959 which case you have
+00:04:16.478 one of two values either one or zero but
+00:04:18.720 we're not going to use this for this
+00:04:20.478 video so we can comment these three
+00:04:22.800 lines what we are interested in here is
+00:04:25.360 the target next close which is just the
+00:04:28.479 next closing price or the closing price
+00:04:30.639 of the next day and this is obtained
+00:04:33.040 just by using the adjusted close column
+00:04:36.479 and shifting it with an index minus one
+00:04:39.280 and after doing this we can drop empty
+00:04:42.639 values empty rows we can reset the index
+00:04:46.400 and also we can drop the volume the
+00:04:49.040 closing
+00:04:50.160 column and the date column because we
+00:04:52.000 don't need them for this study at this
+00:04:54.000 point our data frame looks like this we
+00:04:56.320 have the open high low then the adjusted
+00:04:58.800 close because we dropped the closing
+00:05:00.960 price we don't need it the rsi the fast
+00:05:03.840 moving average the medium moving average
+00:05:06.080 and the slow moving average columns then
+00:05:08.320 we have the target target class and the
+00:05:10.320 target next close and this is the one
+00:05:12.400 we're going to use and try to predict so
+00:05:14.880 we're going to train our model to
+00:05:16.320 predict this particular column if we
+00:05:18.479 take a look at these values here we have
+00:05:20.800 787.179
+00:05:23.600 so this is nothing but the adjusted
+00:05:26.320 close of the next column so this is what
+00:05:28.800 we can see here 787.179
+00:05:31.520 then we will apply a scalar to our data
+00:05:35.199 because we are using neural networks so
+00:05:37.199 our data should be between zero and one
+00:05:39.680 and this is easily done by using the min
+00:05:41.919 max scalar of the scikit-learn package
+00:05:44.639 so this is the way we can do it so min
+00:05:46.639 max scalar
+00:05:48.400 applied to the feature range between
+00:05:50.800 zero and one and i'm going to fit
+00:05:53.360 the data fit and transform the data
+00:05:56.240 which is called data set which is my
+00:05:58.080 data frame here using this particular
+00:06:00.560 scalar and what we obtained from this is
+00:06:03.199 a two-dimensional array it's a numpy
+00:06:06.000 array because the uh the scalar is going
+00:06:08.319 to transform our data frame our pandas
+00:06:10.880 data frame into a numpy array which
+00:06:12.960 values are scaled between 0 and 1. so we
+00:06:15.600 have to keep in mind that the columns
+00:06:18.400 are still kept within this array however
+00:06:21.039 we have to remember which is the first
+00:06:22.880 one the second one and so on just to
+00:06:24.880 make sure that we are feeding the model
+00:06:26.720 with the correct data so our data at
+00:06:29.360 this point looks like this we need to
+00:06:32.160 discard the last three columns from our
+00:06:36.160 input data because we want to feed the
+00:06:39.039 model with the open high low the
+00:06:40.960 adjusted closing price and the rsi the
+00:06:44.319 three moving averages and then we would
+00:06:46.880 like to predict the target or the target
+00:06:49.840 next close whatever we want to predict
+00:06:51.599 so my input data is composed of one two
+00:06:55.199 three four five six seven eight columns
+00:06:58.479 in total because after that is what my
+00:07:01.440 model is supposed to be predicting
+00:07:03.759 so we will feed the input as the first
+00:07:06.400 eight columns and then we will choose
+00:07:08.560 the target next close column to be
+00:07:10.560 predicted and this is done in this cell
+00:07:13.199 the number of back candles is the number
+00:07:15.440 of candles or days you want to look back
+00:07:18.720 in the past just to predict what will be
+00:07:21.840 coming tomorrow or the closing price of
+00:07:24.319 tomorrow's scandal so in the example i
+00:07:27.599 started by four then i gave the number 6
+00:07:30.880 for example so we can try here to read
+00:07:33.680 the past
+00:07:34.800 10 days and we consider that 10 days
+00:07:37.360 data should be enough to predict the
+00:07:39.199 next candles closing price then we're
+00:07:41.520 going to process the eight columns data
+00:07:44.720 as we have explained we're going to put
+00:07:47.120 these into the x which is our input data
+00:07:50.479 for the model the predicted data the
+00:07:52.960 target data which is the y
+00:07:55.360 is one of the columns we're going to
+00:07:57.199 choose so here i'm choosing the last
+00:07:59.120 column column index -1 which is this
+00:08:02.479 target next close in other words the
+00:08:05.280 closing price of the next day so if you
+00:08:08.319 are here also for the coding style in
+00:08:11.520 python
+00:08:12.400 you can summarize all of this cell into
+00:08:15.440 one line of comprehensions these are the
+00:08:17.759 python lists comprehensions it works
+00:08:21.120 very nicely and it's written in a very
+00:08:22.879 elegant way so i'm not going into
+00:08:24.400 details here in this video because it's
+00:08:26.160 not the purpose of what we are doing i
+00:08:28.319 just kept it for you if you are
+00:08:30.319 interested in the coding part so now if
+00:08:32.320 we take a look at the shape of
+00:08:34.880 x
+00:08:35.760 we have eight columns this is what we
+00:08:38.320 considered we have eight columns
+00:08:40.159 including our technical indicators and
+00:08:42.399 this is what we have added into our data
+00:08:44.800 frame
+00:08:45.600 and we have
+00:08:47.120 10 back candles second dimension because
+00:08:49.839 we considered 10 back candles for the
+00:08:52.160 model as an input and we have
+00:08:56.120 2437 rows and this is dependent on the
+00:08:59.360 size of our data frame so if we took 10
+00:09:02.160 years
+00:09:03.040 and we cleaned the data later on what is
+00:09:05.519 left for us is 2300 and 437
+00:09:10.480 rows this is a very tricky part because
+00:09:12.800 if you feed the lstm model with the
+00:09:15.600 wrong dimensions it's not going to work
+00:09:17.920 so
+00:09:18.959 you should always verify
+00:09:21.040 how is the shape of your data what did
+00:09:23.040 you include in the input and the output
+00:09:25.279 data we can try and print x as well just
+00:09:28.480 to take a look how it looks like so we
+00:09:30.399 have three dimensional array it's a
+00:09:32.880 numpy array and if we can print y as
+00:09:36.560 well we can have a look at it
+00:09:38.720 so this one is a
+00:09:40.560 one-dimensional array actually it's a
+00:09:42.560 two-dimensional array but each element
+00:09:44.959 contains only one single value so this
+00:09:47.920 is the correct format this is the
+00:09:49.760 trickiest part is to guess what kind of
+00:09:52.720 shape is compatible with your model that
+00:09:55.920 we are going to train later on and at
+00:09:57.760 this point we can split our data between
+00:10:00.000 the training and the testing data so 80
+00:10:02.640 percent of my data is going to be for my
+00:10:05.279 training or training the model and i'm
+00:10:07.680 leaving 20 for testing the model now we
+00:10:10.640 can include the class package and some
+00:10:12.800 of the modules that are needed for
+00:10:14.640 training our lstm model some of these
+00:10:17.200 are redundant sorry for the mess i've
+00:10:18.959 been copying and pasting these lines
+00:10:20.720 around my codes and trying around to see
+00:10:23.839 uh different results anyway we're using
+00:10:26.160 tensorflow and keras in this case and
+00:10:29.440 notice that my input variable here
+00:10:32.480 we're using the input function and the
+00:10:34.399 shape is equal to the number of back
+00:10:36.399 candles meaning the number of rows i'm
+00:10:38.880 feeding my model with and the number of
+00:10:41.680 columns so this is a two dimensional
+00:10:44.079 input shape matrix that we have to feed
+00:10:46.880 for our model in the training part but
+00:10:49.600 also in the prediction part then i'm
+00:10:52.000 using an intermediate layer of nodes and
+00:10:55.200 we have 150 nodes then one dense layer
+00:10:59.040 one node before proceeding to the output
+00:11:02.160 of my result so the model includes all
+00:11:05.120 of these layers and this is indicated
+00:11:07.760 here in this particular line i'm using
+00:11:10.399 the atom optimizer i'm not going to
+00:11:12.880 details in this video and then i'm
+00:11:14.959 compiling the whole model and we can
+00:11:17.040 start fitting the model feeding it with
+00:11:19.040 the training data the input data and the
+00:11:21.920 training output data or the value to be
+00:11:24.640 predicted depending on the parameters of
+00:11:27.040 the model the number of layers the
+00:11:28.880 number of nodes the number of epochs and
+00:11:31.600 so on it might take a while before the
+00:11:33.760 model is trained so here i chose very
+00:11:35.760 simple parameters and very reduced a
+00:11:38.399 small model relatively simple model so
+00:11:40.880 it's not going to take much time and
+00:11:42.720 after the model is trained
+00:11:44.880 we can try to predict using the same
+00:11:47.200 model but feeding it with the x
+00:11:49.200 underscore test which is the testing
+00:11:51.440 part
+00:11:52.480 meaning the part of the data that the
+00:11:54.240 model didn't read yet so we trained the
+00:11:57.040 model on the training data when we split
+00:12:00.320 our data into training and testing parts
+00:12:02.480 so the 80 percent were used for training
+00:12:04.959 and the test which is the 20 of the data
+00:12:08.639 was kept for now for the predictions so
+00:12:11.200 we can try to predict the
+00:12:13.760 y part the y variable meaning the next
+00:12:16.399 day's closing price and i'm just
+00:12:19.360 printing the first 10
+00:12:21.040 values here between the predicted value
+00:12:23.760 and the real value that should be
+00:12:25.920 predicted so
+00:12:27.760 at first we we cannot compare numbers
+00:12:30.160 visually like this so we can plot these
+00:12:32.320 i'm going to re-plot what we have seen
+00:12:34.480 here and this is the result we are
+00:12:36.959 obtaining so far and this is where
+00:12:38.959 things become interesting actually so we
+00:12:41.839 can see that we have a very similar um
+00:12:44.240 curve
+00:12:45.120 to our data so we can have the first
+00:12:47.839 impression that there is some kind of
+00:12:49.920 nice predictions happening there and the
+00:12:52.160 first thing i'm going to do is to go
+00:12:54.880 back and instead of feeding the model
+00:12:57.680 with the last 10 days data and asking
+00:13:00.560 the model to predict one more value i'm
+00:13:02.560 going to feed it with
+00:13:04.320 30 days so in other words the model is
+00:13:07.600 going to read what happened in the last
+00:13:09.680 30 days and then is going to try to
+00:13:12.399 predict tomorrow's closing price so
+00:13:15.040 let's run this back and see what it will
+00:13:17.040 be
+00:13:17.920 giving
+00:13:19.519 so i retrained the model using 30 back
+00:13:22.240 candles and we're going to see
+00:13:24.800 predictions predictions looking even
+00:13:27.680 closer to the real data in this case to
+00:13:30.480 the market prices and if you are
+00:13:32.240 interested in this we can go back and
+00:13:35.600 change the number of layers you can add
+00:13:38.240 additional layers additional nodes in
+00:13:40.160 here
+00:13:41.040 and
+00:13:42.160 you can as well
+00:13:43.760 actually go back to the beginning and
+00:13:46.320 try to add new technical indicators i
+00:13:49.040 mean i just used four
+00:13:51.199 technical indicators here the rsi and
+00:13:53.600 three different moving averages it would
+00:13:55.600 be interesting to check how the model
+00:13:58.079 behaves if also we provide the slopes of
+00:14:00.880 the moving averages if they are positive
+00:14:03.120 or negative i mean going upwards or
+00:14:05.600 downwards and so on and maybe adding
+00:14:09.440 a momentum column
+00:14:11.760 and other technical indicators that we
+00:14:14.639 assume might be useful in this case
+00:14:16.880 actually there is much more there
+00:14:18.399 there's a small trap in these results
+00:14:20.399 and i'm going to keep this video as
+00:14:22.079 short as possible in the next video i'm
+00:14:24.079 going to discuss the results and we're
+00:14:26.399 going to rerun things in a more clear
+00:14:29.120 way showing where um this model is
+00:14:32.000 failing and why it shouldn't be used as
+00:14:34.880 is to predict the market that being said
+00:14:37.440 some improvements might be done once you
+00:14:39.920 understand the failures of the model
+00:14:42.000 it's always interesting because you can
+00:14:43.839 apply the corrections so stay tuned for
+00:14:46.079 the next one until our next video trade
+00:14:48.560 safe and see you next time

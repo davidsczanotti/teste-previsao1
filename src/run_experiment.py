@@ -15,6 +15,7 @@ from src.models_ts import train_predict_nhits
 from src.signals import build_signals_from_forecast
 from src.backtest import run_backtest
 from src.config import load_config, Cfg
+from src.exp_store import log_run
 
 # MLflow é opcional
 try:
@@ -41,6 +42,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--step-size", type=int, default=1)
     p.add_argument("--input-size", type=int, default=None)
     p.add_argument("--max-steps", type=int, default=None)
+    p.add_argument("--lead-for-signal", type=int, default=None)
     p.add_argument("--exp-thresh", type=float, default=None)
     p.add_argument("--consec", type=int, default=None)
     p.add_argument("--trend-sma", type=int, default=None)
@@ -49,9 +51,21 @@ def parse_args(argv=None) -> argparse.Namespace:
     # RSI opcional
     p.add_argument("--rsi-window", type=int, default=None)
     p.add_argument("--rsi-min", type=float, default=None)
+    # Bollinger / ATR / gestão
+    p.add_argument("--bb-window", type=int, default=None)
+    p.add_argument("--bb-k", type=float, default=None)
+    p.add_argument("--atr-window", type=int, default=None)
+    p.add_argument("--atr-stop-k", type=float, default=None)
+    p.add_argument("--cooldown-bars", type=int, default=None)
+    p.add_argument("--max-hold-bars", type=int, default=None)
     p.add_argument("--fees", type=float, default=None)
     p.add_argument("--slippage", type=float, default=None)
     p.add_argument("--init-cash", type=float, default=None)
+    p.add_argument("--risk-per-trade", type=float, default=None)
+    p.add_argument("--registry-enabled", dest="registry_enabled", action="store_true")
+    p.add_argument("--no-registry-enabled", dest="registry_enabled", action="store_false")
+    p.add_argument("--registry-path", type=str, default=None)
+    p.set_defaults(registry_enabled=None)
     return p.parse_args(argv)
 
 
@@ -72,6 +86,8 @@ def merge_cli_over_config(cfg: Cfg, args: argparse.Namespace) -> Cfg:
         cfg.model.input_size = args.input_size
     if args.max_steps is not None:
         cfg.model.max_steps = args.max_steps
+    if args.lead_for_signal is not None:
+        cfg.model.lead_for_signal = args.lead_for_signal
     # signals
     if args.exp_thresh is not None:
         cfg.signals.exp_thresh = args.exp_thresh
@@ -87,6 +103,18 @@ def merge_cli_over_config(cfg: Cfg, args: argparse.Namespace) -> Cfg:
         cfg.signals.rsi_window = args.rsi_window
     if args.rsi_min is not None:
         cfg.signals.rsi_min = args.rsi_min
+    if args.bb_window is not None:
+        cfg.signals.bb_window = args.bb_window
+    if args.bb_k is not None:
+        cfg.signals.bb_k = args.bb_k
+    if args.atr_window is not None:
+        cfg.signals.atr_window = args.atr_window
+    if args.atr_stop_k is not None:
+        cfg.signals.atr_stop_k = args.atr_stop_k
+    if args.cooldown_bars is not None:
+        cfg.signals.cooldown_bars = args.cooldown_bars
+    if args.max_hold_bars is not None:
+        cfg.signals.max_hold_bars = args.max_hold_bars
     # backtest
     if args.fees is not None:
         cfg.backtest.fees = args.fees
@@ -94,10 +122,16 @@ def merge_cli_over_config(cfg: Cfg, args: argparse.Namespace) -> Cfg:
         cfg.backtest.slippage = args.slippage
     if args.init_cash is not None:
         cfg.backtest.init_cash = args.init_cash
+    if args.risk_per_trade is not None:
+        cfg.backtest.risk_per_trade = args.risk_per_trade
+    if args.registry_enabled is not None:
+        cfg.registry.enabled = args.registry_enabled
+    if args.registry_path is not None:
+        cfg.registry.path = args.registry_path
     return cfg
 
 
-def maybe_start_mlflow(cfg: Cfg):
+def maybe_start_mlflow(cfg: Cfg, git_hash: Optional[str] = None):
     if not cfg.tracking.use_mlflow or mlflow is None:
         return None
     if cfg.tracking.mlflow_uri:
@@ -112,7 +146,7 @@ def maybe_start_mlflow(cfg: Cfg):
             **cfg.model.dict(),
             **cfg.signals.dict(),
             **cfg.backtest.dict(),
-            "git_hash": _git_hash() or "unknown",
+            "git_hash": git_hash or _git_hash() or "unknown",
             "notes": cfg.experiment.notes or "",
         }
     )
@@ -129,7 +163,7 @@ def main(argv=None):
         # fallback mínimo se não passar YAML
         cfg = Cfg.parse_obj(
             {
-                "data": {"tickers": args.tickers or ["VALE3.SA", "PETR4.SA"], "start": args.start or "2020-01-01"},
+                "data": {"tickers": args.tickers or ["VALE3.SA", "PETR4.SA"], "start": args.start or "2015-01-01"},
                 "model": {
                     "horizon": args.horizon or 5,
                     "input_size": args.input_size or 60,
@@ -147,6 +181,12 @@ def main(argv=None):
                     "vol_window": args.vol_window or 20,
                     "rsi_window": args.rsi_window,
                     "rsi_min": args.rsi_min,
+                    "bb_window": args.bb_window,
+                    "bb_k": args.bb_k or 2.0,
+                    "atr_window": args.atr_window,
+                    "atr_stop_k": args.atr_stop_k,
+                    "cooldown_bars": args.cooldown_bars or 0,
+                    "max_hold_bars": args.max_hold_bars,
                 },
                 "backtest": {
                     "init_cash": args.init_cash or 100000,
@@ -157,6 +197,7 @@ def main(argv=None):
                     "risk_per_trade": None,
                 },
                 "tracking": {"use_mlflow": False, "mlflow_experiment": "default", "mlflow_uri": None},
+                "registry": {"enabled": False, "path": "reports/experiments.sqlite"},
                 "experiment": {"name": "run", "notes": None},
             }
         )
@@ -211,6 +252,12 @@ def main(argv=None):
         vol_window=cfg.signals.vol_window,
         rsi_window=cfg.signals.rsi_window,
         rsi_min=cfg.signals.rsi_min,
+        bb_window=cfg.signals.bb_window,
+        bb_k=cfg.signals.bb_k,
+        atr_window=cfg.signals.atr_window,
+        atr_stop_k=cfg.signals.atr_stop_k,
+        cooldown_bars=cfg.signals.cooldown_bars,
+        max_hold_bars=cfg.signals.max_hold_bars,
         only_non_overlapping=cfg.backtest.only_non_overlapping,
         debug=True,
     )
@@ -223,12 +270,16 @@ def main(argv=None):
         vol = vol.reindex(close_wide.index).fillna(method="ffill")
         vol = vol.replace(0.0, 1e-4)
         risk_cash = cfg.backtest.risk_per_trade * cfg.backtest.init_cash
-        size_wide = (risk_cash / (vol * close_wide)).clip(lower=0.0)
-        # arredonda para inteiro de shares (conservador)
+        size_wide = (risk_cash / (vol * close_wide))
+        # limpar valores inválidos e ser conservador nas primeiras barras
+        size_wide = size_wide.replace([float("inf"), float("-inf")], float("nan")).fillna(0.0)
+        # clamp >= 0 e arredondar para baixo (inteiro de shares)
+        size_wide = size_wide.clip(lower=0.0)
         size_wide = size_wide.applymap(lambda x: float(max(0, int(x))))
 
     # 5) Backtest
     print("5) Backtest por ticker (vectorbt)...")
+    report_path = Path("reports/summary_baseline.csv")
     summary_df, pf_dict = run_backtest(
         close_wide=close_wide,
         signals=signals,
@@ -237,7 +288,7 @@ def main(argv=None):
         slippage=cfg.backtest.slippage,
         direction=cfg.backtest.direction,
         save_trades=True,
-        report_path="reports/summary_baseline.csv",
+        report_path=report_path,
         size_wide=size_wide,
     )
 
@@ -245,8 +296,22 @@ def main(argv=None):
     print(summary_df)
     print("\nRelatório salvo em: reports/summary_baseline.csv")
 
+    git_hash_value = _git_hash()
+    if cfg.registry.enabled:
+        try:
+            run_id = log_run(
+                db_path=cfg.registry.path,
+                cfg=cfg,
+                summary_df=summary_df,
+                report_path=report_path,
+                git_hash=git_hash_value,
+            )
+            print(f"[registry] Run {run_id} salvo em {cfg.registry.path}")
+        except Exception as exc:
+            print(f"[registry] Falha ao registrar experimento: {exc}")
+
     # MLflow
-    run = maybe_start_mlflow(cfg)
+    run = maybe_start_mlflow(cfg, git_hash=git_hash_value)
     if run is not None:
         try:
             # log metrics resumidas

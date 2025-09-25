@@ -70,6 +70,12 @@ def build_signals_from_forecast(
     # Filtros RSI opcionais
     rsi_window: Optional[int] = None,
     rsi_min: Optional[float] = None,
+    bb_window: Optional[int] = None,
+    bb_k: float = 2.0,
+    atr_window: Optional[int] = None,
+    atr_stop_k: Optional[float] = None,
+    cooldown_bars: int = 0,
+    max_hold_bars: Optional[int] = None,
     # Evitar entradas sobrepostas enquanto posição está aberta
     only_non_overlapping: bool = False,
     debug: bool = False,
@@ -78,6 +84,11 @@ def build_signals_from_forecast(
     """
     Constrói sinais a partir das previsões (long DataFrame -> wide),
     calcula retorno esperado por dia/ativo e aplica regras de entrada/saída.
+
+    Filtros opcionais disponíveis:
+      - Bandas de Bollinger (bb_window/bb_k) para reforçar tendências.
+      - Stop baseado em ATR aproximado (atr_window/atr_stop_k).
+      - Cooldown pós-saída e limite máximo de barras por trade.
 
     Retorna:
       { ticker: {"entries": Series[bool], "exits": Series[bool]} }
@@ -133,35 +144,101 @@ def build_signals_from_forecast(
     if consec and consec > 1:
         entries = _require_consecutive(entries.fillna(False), consec)
 
+    # 7.1) Bollinger Bands (opcional)
+    bb_exit_mask = pd.DataFrame(False, index=exp_ret.index, columns=exp_ret.columns)
+    if bb_window is not None and bb_window > 1:
+        bb_ma = close_wide.rolling(bb_window, min_periods=bb_window).mean().reindex_like(exp_ret)
+        bb_std = close_wide.rolling(bb_window, min_periods=bb_window).std().reindex_like(exp_ret)
+        bb_upper = (bb_ma + float(bb_k) * bb_std).reindex_like(exp_ret)
+        entries = entries & (close_wide.reindex_like(exp_ret) > bb_upper).fillna(False)
+        bb_exit_mask = (close_wide.reindex_like(exp_ret) < bb_ma).fillna(False)
+
+    # 7.2) ATR aproximado (com base em Close) para trailing stop
+    atr_frame: Optional[pd.DataFrame] = None
+    if atr_window is not None and atr_window > 1 and atr_stop_k is not None and atr_stop_k > 0.0:
+        atr_frame = close_wide.diff().abs().rolling(atr_window, min_periods=atr_window).mean().reindex_like(exp_ret)
+    else:
+        atr_stop_k = None
+
     # 8) Limpeza fina
     entries = entries.fillna(False)
     exits = exits.fillna(False)
 
-    # 8.1) Suprimir entradas sobrepostas (uma posição por vez)
-    if only_non_overlapping:
-        pruned_entries = {}
-        for t in close_wide.columns:
-            e = entries.get(t, pd.Series(False, index=exp_ret.index)).copy()
-            x = exits.get(t, pd.Series(False, index=exp_ret.index)).copy()
-            # varredura temporal para impedir múltiplas entradas antes de uma saída
-            open_pos = False
-            e_out = []
-            for ts in e.index:
-                if x.loc[ts] and open_pos:
-                    open_pos = False
-                if e.loc[ts] and not open_pos:
-                    e_out.append(True)
-                    open_pos = True
-                else:
-                    e_out.append(False)
-            pruned_entries[t] = pd.Series(e_out, index=e.index)
-        entries = pd.DataFrame(pruned_entries).reindex_like(entries).fillna(False)
-
     # 9) Montar dict final, **alinhado ao índice de cada ticker** em close_wide
     signals: Dict[str, Dict[str, pd.Series]] = {}
+    needs_iter = (
+        only_non_overlapping
+        or cooldown_bars > 0
+        or (max_hold_bars is not None and max_hold_bars > 0)
+        or atr_frame is not None
+        or bb_exit_mask.any().any()
+    )
     for t in close_wide.columns:
-        e = entries.get(t, pd.Series(False, index=exp_ret.index)).reindex(close_wide.index, fill_value=False)
-        x = exits.get(t, pd.Series(False, index=exp_ret.index)).reindex(close_wide.index, fill_value=False)
+        base_entries = entries.get(t, pd.Series(False, index=exp_ret.index)).reindex(close_wide.index, fill_value=False)
+        base_exits = exits.get(t, pd.Series(False, index=exp_ret.index)).reindex(close_wide.index, fill_value=False)
+
+        if needs_iter:
+            price = close_wide[t].reindex(close_wide.index)
+            bb_exit = bb_exit_mask.get(t, pd.Series(False, index=exp_ret.index)).reindex(close_wide.index, fill_value=False)
+            atr_series = (
+                atr_frame.get(t, pd.Series(float("nan"), index=exp_ret.index)).reindex(close_wide.index)
+                if atr_frame is not None
+                else None
+            )
+
+            open_pos = False
+            entry_price = float("nan")
+            hold_bars = 0
+            cooldown = 0
+            entries_out = []
+            exits_out = []
+
+            for ts in price.index:
+                price_now = price.loc[ts]
+
+                exit_flag = bool(base_exits.loc[ts]) and open_pos
+                if open_pos:
+                    hold_bars += 1
+                    if max_hold_bars is not None and max_hold_bars > 0 and hold_bars >= max_hold_bars:
+                        exit_flag = True
+                    if atr_series is not None and atr_stop_k is not None:
+                        atr_val = atr_series.loc[ts]
+                        if pd.notna(atr_val) and pd.notna(entry_price) and pd.notna(price_now):
+                            if price_now <= entry_price - atr_stop_k * atr_val:
+                                exit_flag = True
+                    if bb_exit.loc[ts]:
+                        exit_flag = True
+                else:
+                    hold_bars = 0
+
+                if exit_flag:
+                    exits_out.append(True)
+                    open_pos = False
+                    entry_price = float("nan")
+                    hold_bars = 0
+                    cooldown = max(cooldown_bars, 0)
+                else:
+                    exits_out.append(False)
+                    if cooldown > 0:
+                        cooldown -= 1
+
+                allow_entry = (not open_pos or not only_non_overlapping) and cooldown == 0
+                entry_flag = bool(base_entries.loc[ts]) and allow_entry
+                if entry_flag:
+                    entries_out.append(True)
+                    if not open_pos:
+                        entry_price = price_now
+                        hold_bars = 0
+                    open_pos = True
+                else:
+                    entries_out.append(False)
+
+            e = pd.Series(entries_out, index=price.index)
+            x = pd.Series(exits_out, index=price.index)
+        else:
+            e = base_entries
+            x = base_exits
+
         signals[t] = {"entries": e.astype(bool), "exits": x.astype(bool)}
 
         if debug:

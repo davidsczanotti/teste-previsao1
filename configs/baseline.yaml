@@ -18,6 +18,12 @@ signals:
   vol_window: 20          # janela da volatilidade (em barras)
   rsi_window: null        # ex.: 14 para ativar filtro RSI
   rsi_min: null           # ex.: 50 exige momentum positivo
+  bb_window: null         # bandas de bollinger: janela
+  bb_k: 2.0               # multiplicador da banda superior
+  atr_window: null        # ATR aproximado (usando close)
+  atr_stop_k: null        # múltiplos do ATR para stop
+  cooldown_bars: 0        # barras de espera após saída
+  max_hold_bars: null     # limite máximo de barras por trade
 backtest:
   init_cash: 100000
   fees: 0.0005

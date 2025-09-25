@@ -83,6 +83,80 @@ de `Total Return [%]` por ticker.
 
 ---
 
+## Registro local de experimentos (SQLite)
+
+Para não perder histórico de configurações/testes, habilite o **registry** local:
+
+1. No YAML (`configs/baseline.yaml`, por exemplo):
+   ```yaml
+   registry:
+     enabled: true
+     path: "reports/experiments.sqlite"
+   ```
+   ou via CLI: `--registry-enabled --registry-path reports/experiments.sqlite`.
+
+2. Cada execução salva:
+   - Metadados (nome do experimento, notas, git hash, config em JSON).
+   - Métricas por ticker (Total Return, Sharpe, Win Rate, Max DD, Trades).
+
+3. Para inspecionar as execuções mais recentes:
+   ```bash
+   poetry run python - <<'PY'
+   from src.exp_store import last_runs
+   import pandas as pd
+
+   df = last_runs("reports/experiments.sqlite", limit=20)
+   pd.options.display.width = 0
+   print(df)
+   PY
+   ```
+
+O schema fica em `src/exp_store.py`; é independente do MLflow e funciona offline.
+
+---
+
+## Grid search automatizado
+
+Use `scripts/grid_search.py` para testar múltiplas combinações de parâmetros sem
+repetir manualmente:
+
+```bash
+poetry run python -m scripts.grid_search \
+  --config configs/baseline.yaml \
+  --dyn-thresh-k 0.9 1.1 1.3 \
+  --trend-sma 100 150 \
+  --bb-window 50 --bb-k 2.0 2.5 \
+  --cooldown-bars 0 3 \
+  --target-total-return 5 --max-drawdown 30
+```
+
+Características:
+- Reaproveita ingestão, preparo e NHITS (cacheia previsões por `lead_for_signal`).
+- Escreve cada tentativa em `reports/summary_grid_XXXX.csv` e, se o registry
+  estiver habilitado, salva no SQLite automaticamente.
+- Early-stop quando atingir `--target-total-return`, `--target-sharpe` e/ou
+  `--max-drawdown`.
+- Exporta um consolidado em `reports/grid_search_results.csv`.
+
+---
+
+## Filtros opcionais de sinais
+
+Além do threshold fixo/dinâmico e do filtro de tendência, agora é possível ligar:
+
+- **Bandas de Bollinger** (`bb_window`, `bb_k`): entra apenas acima da banda
+  superior e força saída quando o preço cai abaixo da média.
+- **Stop por ATR aproximado** (`atr_window`, `atr_stop_k`): usa a média do
+  movimento absoluto dos fechamentos como proxy de ATR para trailing stop.
+- **Cooldown pós-saída** (`cooldown_bars`) e **tempo máximo em posição**
+  (`max_hold_bars`).
+
+Os parâmetros podem ser definidos no YAML (`signals.*`) ou via CLI
+(`--bb-window`, `--atr-stop-k`, etc.). Todos ficam desligados por padrão para
+manter o baseline original.
+
+---
+
 ## Smoke test (anti-regressão do backtest)
 
 ```bash
