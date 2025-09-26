@@ -441,8 +441,14 @@
       <section class="card">
         <div style="display:flex; justify-content: space-between; align-items:flex-start; gap:16px;">
           <h2>Resultado — {{ result.ticker }}</h2>
-          {% set status = result.status %}
-          <span class="status-pill status-{{ status.code }}">{{ status.label }}</span>
+          <div style="display:flex; gap:12px; align-items:center;">
+            {% set status = result.status %}
+            <span class="status-pill status-{{ status.code }}">{{ status.label }}</span>
+            <form method="post" action="{{ url_for('reset_go_live_route') }}" onsubmit="return confirm('Resetar Go‑Live para {{ result.ticker }}?');">
+              <input type="hidden" name="ticker" value="{{ result.ticker }}" />
+              <button type="submit">Resetar Go‑Live</button>
+            </form>
+          </div>
         </div>
         <div class="result-meta">
           <span><strong>Aporte:</strong> R$ {{ "{:,.2f}".format(result.aporte) }}</span>

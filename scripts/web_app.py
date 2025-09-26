@@ -7,7 +7,8 @@ import sys
 from collections import OrderedDict
 from typing import List, Any, Optional
 
-from flask import Flask, render_template, request, flash, redirect, url_for
+from flask import Flask, render_template, request, flash, redirect, url_for, jsonify
+import subprocess
 import pandas as pd
 import threading
 import time
@@ -19,7 +20,7 @@ from src.signals import build_signals_from_forecast
 from src.backtest import run_backtest
 from src.config import Cfg
 from src.exp_store import log_run, last_runs
-from src.user_state import get_go_live_date, set_go_live_date, reset_go_live
+from src.user_state import get_go_live_date, set_go_live_date, reset_go_live, reset_all_go_live
 from src.app_config import get_config, set_config
 
 
@@ -569,6 +570,71 @@ def reset_go_live_route():
     return redirect(url_for("index"))
 
 
+@APP.route("/run_job", methods=["POST"])
+def run_job():
+    job = request.form.get("job")
+    if job not in {"eod", "morning"}:
+        flash("Job inválido.", "error")
+        return redirect(url_for("config_page"))
+    try:
+        try:
+            set_config({"queued_job": job, "queued_at": time.strftime("%Y-%m-%d %H:%M:%S")})
+        except Exception:
+            pass
+        subprocess.Popen([sys.executable, "-m", "scripts.daily_jobs", "--job", job])
+        flash(f"Job '{job}' disparado.", "success")
+    except Exception as exc:
+        flash(f"Falha ao disparar job: {exc}", "error")
+    return redirect(url_for("config_page"))
+
+
+@APP.route("/run_scan", methods=["POST"])
+def run_scan():
+    from src.app_config import get_config
+    cfg = get_config()
+    universe = cfg.get("universe_path", "configs/universe_b3.txt")
+    try:
+        subprocess.Popen([sys.executable, "-m", "scripts.run_universe_scan", "--universe", universe])
+        flash("Scan do universo disparado.", "success")
+    except Exception as exc:
+        flash(f"Falha ao disparar scan: {exc}", "error")
+    return redirect(url_for("config_page"))
+
+
+@APP.route("/reset_all_go_live", methods=["POST"])
+def reset_all_go_live_route():
+    try:
+        reset_all_go_live()
+        flash("Todos os Go‑Live foram resetados.", "success")
+    except Exception as exc:
+        flash(f"Falha ao resetar Go‑Live: {exc}", "error")
+    return redirect(url_for("config_page"))
+
+
+@APP.route("/config_status", methods=["GET"])
+def config_status():
+    """Endpoint leve para polling de status na página de configuração."""
+    cfg = get_config()
+    keys = [
+        "scheduler_enabled",
+        "eod_time",
+        "am_time",
+        "last_morning",
+        "last_morning_rc",
+        "last_eod",
+        "last_eod_rc",
+        "queued_job",
+        "queued_at",
+        "job_running",
+        "job_running_since",
+        "last_job_msg",
+        "last_scan_csv",
+        "last_scan_csv_daily",
+    ]
+    data = {k: cfg.get(k) for k in keys}
+    return jsonify(data)
+
+
 if __name__ == "__main__":
     debug_flag = os.getenv("FLASK_DEBUG", "0") in {"1", "true", "True"}
     port = int(os.getenv("PORT", "5000"))
@@ -592,9 +658,17 @@ if __name__ == "__main__":
                     eod = cfg.get("eod_time", cfg0.get("eod_time", "20:05"))
                     am = cfg.get("am_time", cfg0.get("am_time", "08:00"))
                     if _should_run(hm, eod, last_run, "eod"):
-                        threading.Thread(target=lambda: os.system(f"{sys.executable} -m scripts.daily_jobs --job eod"), daemon=True).start()
+                        try:
+                            set_config({"queued_job": "eod", "queued_at": time.strftime("%Y-%m-%d %H:%M:%S")})
+                        except Exception:
+                            pass
+                        threading.Thread(target=lambda: subprocess.Popen([sys.executable, "-m", "scripts.daily_jobs", "--job", "eod"]), daemon=True).start()
                     if _should_run(hm, am, last_run, "morning"):
-                        threading.Thread(target=lambda: os.system(f"{sys.executable} -m scripts.daily_jobs --job morning"), daemon=True).start()
+                        try:
+                            set_config({"queued_job": "morning", "queued_at": time.strftime("%Y-%m-%d %H:%M:%S")})
+                        except Exception:
+                            pass
+                        threading.Thread(target=lambda: subprocess.Popen([sys.executable, "-m", "scripts.daily_jobs", "--job", "morning"]), daemon=True).start()
             except Exception:
                 pass
             time.sleep(30)

@@ -49,3 +49,10 @@ def reset_go_live(ticker: str) -> None:
     conn.execute("DELETE FROM user_state WHERE ticker = ?", (ticker,))
     conn.commit()
     conn.close()
+
+
+def reset_all_go_live() -> None:
+    conn = _ensure_db()
+    conn.execute("DELETE FROM user_state")
+    conn.commit()
+    conn.close()

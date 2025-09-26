@@ -61,12 +61,108 @@
             <input id="universe_path" type="text" name="universe_path" value="{{ cfg.universe_path }}" />
           </div>
         </div>
-        <div class="actions">
+        <div class="actions" style="display:flex; gap:12px; align-items:center;">
           <button type="submit">Salvar</button>
           <a href="{{ url_for('index') }}">Voltar</a>
+          <form method="post" action="{{ url_for('run_job') }}" style="display:inline; margin-left:12px;">
+            <input type="hidden" name="job" value="morning" />
+            <button type="submit">Executar agora (manhã)</button>
+          </form>
+          <form method="post" action="{{ url_for('run_job') }}" style="display:inline;">
+            <input type="hidden" name="job" value="eod" />
+            <button type="submit">Executar agora (EOD)</button>
+          </form>
         </div>
       </form>
     </div>
-  </body>
-  </html>
 
+    <div class="card" style="margin-top:16px;">
+      <h3>Status do agendador</h3>
+      <p class="muted">Última manhã: <span id="last_morning">{{ cfg.last_morning or '—' }}</span> (rc=<span id="last_morning_rc">{{ cfg.last_morning_rc or '—' }}</span>)</p>
+      <p class="muted">Último EOD: <span id="last_eod">{{ cfg.last_eod or '—' }}</span> (rc=<span id="last_eod_rc">{{ cfg.last_eod_rc or '—' }}</span>)</p>
+      <p class="muted">Fila: <span id="queued_job">{{ cfg.queued_job or '—' }}</span> em <span id="queued_at">{{ cfg.queued_at or '—' }}</span> — Executando: <span id="job_running">{{ cfg.job_running or '—' }}</span> desde <span id="job_running_since">{{ cfg.job_running_since or '—' }}</span></p>
+      <p class="muted">Último job: <span id="last_job_msg">{{ cfg.last_job_msg or '—' }}</span></p>
+      <p class="muted">Último scan: 
+        {% if cfg.last_scan_csv %}<a id="last_scan_csv" href="/{{ cfg.last_scan_csv }}" target="_blank">{{ cfg.last_scan_csv }}</a>{% else %}<span id="last_scan_csv">—</span>{% endif %}
+        &nbsp;|&nbsp;
+        {% if cfg.last_scan_csv_daily %}<a id="last_scan_csv_daily" href="/{{ cfg.last_scan_csv_daily }}" target="_blank">{{ cfg.last_scan_csv_daily }}</a>{% else %}<span id="last_scan_csv_daily">—</span>{% endif %}
+      </p>
+      <div style="display:flex; gap:12px;">
+        <form method="post" action="{{ url_for('run_scan') }}">
+          <button type="submit">Executar scan do universo agora</button>
+        </form>
+        <form method="post" action="{{ url_for('reset_all_go_live_route') }}" onsubmit="return confirm('Resetar Go‑Live de todos os tickers?');">
+          <button type="submit">Zerar todos os Go‑Live</button>
+        </form>
+      </div>
+    </div>
+  </body>
+  <script>
+    (function() {
+      const el = (id) => document.getElementById(id);
+      const ids = ["last_morning", "last_morning_rc", "last_eod", "last_eod_rc", "queued_job", "queued_at", "job_running", "job_running_since", "last_job_msg"];
+      const applyUpdate = (id, val) => {
+        const node = el(id);
+        if (!node) return;
+        if (node.textContent !== String(val ?? '—')) {
+          node.textContent = String(val ?? '—');
+          node.classList.add('updated');
+          setTimeout(() => node.classList.remove('updated'), 1800);
+        }
+      };
+      const poll = async () => {
+        try {
+          const res = await fetch('/config_status');
+          const data = await res.json();
+          applyUpdate('last_morning', data.last_morning || '—');
+          applyUpdate('last_morning_rc', data.last_morning_rc || '—');
+          applyUpdate('last_eod', data.last_eod || '—');
+          applyUpdate('last_eod_rc', data.last_eod_rc || '—');
+          applyUpdate('queued_job', data.queued_job || '—');
+          applyUpdate('queued_at', data.queued_at || '—');
+          applyUpdate('job_running', data.job_running || '—');
+          applyUpdate('job_running_since', data.job_running_since || '—');
+          applyUpdate('last_job_msg', data.last_job_msg || '—');
+          if (data.last_scan_csv) {
+            let a = document.getElementById('last_scan_csv');
+            if (!a || a.tagName !== 'A') {
+              const span = document.getElementById('last_scan_csv');
+              if (span) {
+                const link = document.createElement('a');
+                link.id = 'last_scan_csv';
+                link.target = '_blank';
+                link.textContent = data.last_scan_csv;
+                link.href = '/' + data.last_scan_csv;
+                span.replaceWith(link);
+              }
+            } else {
+              a.href = '/' + data.last_scan_csv;
+              a.textContent = data.last_scan_csv;
+            }
+          }
+          if (data.last_scan_csv_daily) {
+            let a2 = document.getElementById('last_scan_csv_daily');
+            if (!a2 || a2.tagName !== 'A') {
+              const span2 = document.getElementById('last_scan_csv_daily');
+              if (span2) {
+                const link2 = document.createElement('a');
+                link2.id = 'last_scan_csv_daily';
+                link2.target = '_blank';
+                link2.textContent = data.last_scan_csv_daily;
+                link2.href = '/' + data.last_scan_csv_daily;
+                span2.replaceWith(link2);
+              }
+            } else {
+              a2.href = '/' + data.last_scan_csv_daily;
+              a2.textContent = data.last_scan_csv_daily;
+            }
+          }
+        } catch (e) {}
+      };
+      setInterval(poll, 5000);
+    })();
+  </script>
+  <style>
+    .updated { background: #eaf7ea; border-radius: 4px; padding: 0 4px; }
+  </style>
+  </html>

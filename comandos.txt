@@ -47,6 +47,17 @@ Assim a imagem fica registrada localmente e o docker run passa a encontrá-la.
 
 ****************************
 
+
+Como usar (Docker)
+
+Rebuild e reinicie:
+docker build -t teste-previsao1:latest .
+docker stop previsao-web && docker rm previsao-web
+docker run -d --name previsao-web -p 5000:5000 -v $(pwd)/reports:/app/reports teste-previsao1:latest
+docker logs -f previsao-web
+
+****************************
+
 Imagem construída com sucesso e o container chegou a iniciar (docker run … retornou o ID). Em seguida você o parou e removeu (docker stop previsao-web && docker rm previsao-web), por isso ele não está mais rodando.
 
 Para deixá-lo ativo novamente, rode:
