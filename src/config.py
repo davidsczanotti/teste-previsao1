@@ -10,6 +10,7 @@ import pathlib
 class DataCfg(BaseModel):
     tickers: List[str] = Field(..., min_items=1)
     start: str
+    end: Optional[str] = None
 
 
 class ModelCfg(BaseModel):

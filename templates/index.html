@@ -1,24 +1,319 @@
 <!doctype html>
-<html>
+<html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
-    <title>Paper Trading – Frontend</title>
+    <title>Paper Trading – Painel de Simulação</title>
     <style>
-      body { font-family: system-ui, Arial, sans-serif; margin: 20px; }
-      .row { display: flex; gap: 24px; }
-      .col { flex: 1; }
-      table { border-collapse: collapse; width: 100%; }
-      th, td { border: 1px solid #ddd; padding: 6px 8px; }
-      th { background: #f2f2f2; }
-      .flash { padding: 8px 10px; margin-bottom: 10px; border-radius: 4px; }
-      .flash.success { background: #eaf7ea; color: #1c5c1c; }
-      .flash.error { background: #fdecea; color: #8a1f15; }
-      .card { border: 1px solid #ddd; padding: 12px; border-radius: 6px; }
-      .muted { color: #666; font-size: 0.9em; }
+      :root {
+        color-scheme: light;
+        --bg: #f5f6fa;
+        --card-bg: #ffffff;
+        --border: #dce1ec;
+        --accent: #1f6feb;
+        --text: #1b1f24;
+        --muted: #606a80;
+        --success-bg: #d9f7d6;
+        --success-text: #1d5c21;
+        --error-bg: #ffe2e0;
+        --error-text: #8a1f15;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 24px 32px 48px;
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      header {
+        margin-bottom: 24px;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 28px;
+      }
+
+      .subtitle {
+        margin: 0;
+        font-size: 16px;
+        color: var(--muted);
+      }
+
+      .grid {
+        display: grid;
+        gap: 20px;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        margin-bottom: 24px;
+      }
+
+      .card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 18px 20px;
+        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+      }
+
+      h2 {
+        margin-top: 0;
+        font-size: 20px;
+      }
+
+      form.config-form {
+        display: grid;
+        gap: 16px;
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      label {
+        font-weight: 600;
+        font-size: 14px;
+      }
+
+      input[type="date"],
+      input[type="number"],
+      select {
+        font-size: 15px;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+
+      input[type="number"]:focus,
+      input[type="date"]:focus,
+      select:focus,
+      button:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
+
+      button[type="submit"] {
+        margin-top: 8px;
+        padding: 10px 16px;
+        border-radius: 6px;
+        border: none;
+        background: var(--accent);
+        color: #fff;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button[type="submit"]:hover {
+        opacity: 0.92;
+      }
+
+      .muted {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .flash {
+        padding: 12px 14px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        font-weight: 500;
+      }
+      .flash.success {
+        background: var(--success-bg);
+        color: var(--success-text);
+        border: 1px solid rgba(0, 128, 0, 0.18);
+      }
+      .flash.error {
+        background: var(--error-bg);
+        color: var(--error-text);
+        border: 1px solid rgba(255, 0, 0, 0.18);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+
+      th, td {
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        text-align: left;
+      }
+
+      th {
+        background: #f0f4ff;
+      }
+
+      .result-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .status-pill svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      .status-waiting { background: rgba(31, 111, 235, 0.12); color: #1f3e8f; }
+      .status-open { background: rgba(26, 172, 96, 0.16); color: #186a3b; }
+      .status-flat_after_trades { background: rgba(96, 103, 128, 0.16); color: #4d5567; }
+
+      .status-detail {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        color: var(--muted);
+        background: rgba(15, 23, 42, 0.04);
+      }
+
+      .result-meta span strong {
+        color: var(--text);
+      }
+
+      .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 14px;
+        margin: 18px 0 12px;
+      }
+
+      .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+        margin: 22px 0 12px;
+      }
+
+      .info-card {
+        background: #f7f9ff;
+        border-radius: 8px;
+        padding: 14px 16px;
+        border: 1px solid rgba(31, 111, 235, 0.08);
+      }
+
+      .info-title {
+        margin: 0 0 10px;
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-weight: 700;
+      }
+
+      .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+
+      .info-label {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .info-value {
+        font-size: 16px;
+        font-weight: 600;
+      }
+
+      .value-positive {
+        color: #1f6f3f;
+      }
+
+      .value-negative {
+        color: #c0392b;
+      }
+
+      .value-neutral {
+        color: var(--text);
+      }
+
+      .metric-card {
+        background: #f4f6fb;
+        border-radius: 8px;
+        padding: 12px 14px;
+        border: 1px solid rgba(0, 0, 0, 0.04);
+      }
+
+      .metric-label {
+        display: block;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .metric-value {
+        margin-top: 4px;
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text);
+      }
+
+      .file-paths {
+        margin-top: 12px;
+        font-size: 13px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      code {
+        font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+        background: rgba(15, 23, 42, 0.06);
+        padding: 2px 4px;
+        border-radius: 4px;
+      }
+
+      ul.tips {
+        margin: 12px 0 0;
+        padding-left: 18px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      ul.tips li {
+        margin-bottom: 8px;
+      }
+
+      .empty-state {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      @media (max-width: 720px) {
+        body {
+          padding: 20px;
+        }
+      }
     </style>
   </head>
   <body>
-    <h1>Paper Trading – Execução por Ticker</h1>
+    <header>
+      <h1>Paper Trading – Painel de Simulação</h1>
+      <p class="subtitle">Simule aportes fictícios, execute o modelo NHITS e acompanhe as métricas de cada ticker.</p>
+    </header>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
@@ -28,49 +323,90 @@
       {% endif %}
     {% endwith %}
 
-    <div class="row">
-      <div class="col">
-        <div class="card">
-          <form method="post">
-            <label> Ticker:
-              <select name="ticker">
-                {% for t in tickers %}
-                  <option value="{{t}}">{{t}}</option>
-                {% endfor %}
-              </select>
-            </label>
-            <br/>
-            <label> Aporte (init_cash):
-              <input type="number" name="aporte" value="100000" step="1000" />
-            </label>
-            <br/>
-            <label> Início (start):
-              <input type="date" name="start" value="2018-01-01" />
-            </label>
-            <br/>
-            <label> Perfil:
-              <select name="profile">
-                <option value="A">A (retorno)</option>
-                <option value="B" selected>B (eficiência – sizing 0.5%)</option>
-              </select>
-            </label>
-            <br/>
-            <button type="submit">Incluir</button>
-          </form>
-          <p class="muted">Perfil A: lead=2, SMA100, dyn_k=0.8, exp=0.0, ATR(14,1.5). Perfil B: A + risk_per_trade=0.005.</p>
-        </div>
+    <section class="grid">
+      <div class="card">
+        <h2>Configurar execução</h2>
+        <form method="post" class="config-form">
+          <div class="field">
+            <label for="ticker">Ticker</label>
+            <select name="ticker" id="ticker">
+              {% for t in tickers %}
+                <option value="{{ t }}" {% if form.ticker == t %}selected{% endif %}>{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="period">Período rápido</label>
+            <select name="period" id="period">
+              <option value="custom" {% if form.period == 'custom' %}selected{% endif %}>Personalizado</option>
+              <option value="last30" data-days="30" {% if form.period == 'last30' %}selected{% endif %}>Último mês (30 dias)</option>
+              <option value="last90" data-days="90" {% if form.period == 'last90' %}selected{% endif %}>Últimos 3 meses</option>
+              <option value="last180" data-days="180" {% if form.period == 'last180' %}selected{% endif %}>Últimos 6 meses</option>
+              <option value="last365" data-days="365" {% if form.period == 'last365' %}selected{% endif %}>Último ano</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="start">Início</label>
+            <input type="date" id="start" name="start" value="{{ form.start }}" />
+          </div>
+
+          <div class="field">
+            <label for="end">Fim</label>
+            <input type="date" id="end" name="end" value="{{ form.end }}" />
+          </div>
+
+          <div class="field">
+            <label for="aporte">Aporte fictício (init_cash)</label>
+            <input type="number" id="aporte" name="aporte" value="{{ form.aporte }}" step="1000" min="0" />
+          </div>
+
+          <div class="field">
+            <label for="profile">Perfil</label>
+            <select name="profile" id="profile">
+              <option value="A" {% if form.profile == 'A' %}selected{% endif %}>A — foco em retorno</option>
+              <option value="B" {% if form.profile != 'A' %}selected{% endif %}>B — sizing com risco 0,5%</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="ref_month">Mês de referência (YYYY-MM)</label>
+            <input type="month" id="ref_month" name="ref_month" value="{{ form.ref_month }}" />
+          </div>
+
+          <button type="submit">Executar simulação</button>
+        </form>
+        <p class="muted">
+          Perfil A: lead=2, SMA100, dyn_k=0.8, exp=0.0, ATR(14, 1.5).<br />
+          Perfil B: Perfil A + dimensionamento dinâmico com <code>risk_per_trade = 0.005</code>.
+        </p>
       </div>
 
-      <div class="col">
-        <div class="card">
-          <h3>Últimos runs (registry)</h3>
-          {% if recent is not none and recent.shape[0] > 0 %}
-            <table>
+      <div class="card">
+        <h2>Como usar</h2>
+        <ul class="tips">
+          <li>Para um teste mensal, selecione “Último mês” ou ajuste as datas manualmente.</li>
+          <li>Mantenha pelo menos 90 dias de histórico para o NHITS ter contexto.</li>
+          <li>Os arquivos gerados ficam em <code>reports/</code>. Abra o CSV para inspeção detalhada.</li>
+          <li>Use o bloco “Últimos runs” para recuperar execuções anteriores e comparar métricas.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Últimos runs registrados</h2>
+      {% if recent is not none and recent.shape[0] > 0 %}
+        <div style="overflow-x: auto;">
+          <table>
+            <thead>
               <tr>
                 {% for c in recent.columns %}
-                  <th>{{c}}</th>
+                  <th>{{ c }}</th>
                 {% endfor %}
               </tr>
+            </thead>
+            <tbody>
               {% for _, row in recent.iterrows() %}
                 <tr>
                   {% for c in recent.columns %}
@@ -78,33 +414,367 @@
                   {% endfor %}
                 </tr>
               {% endfor %}
-            </table>
-          {% else %}
-            <p class="muted">Sem runs recentes.</p>
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="empty-state">Sem execuções armazenadas ainda.</p>
+      {% endif %}
+    </section>
+
+    {% if results %}
+      {% for result in results %}
+      <section class="card">
+        <div style="display:flex; justify-content: space-between; align-items:flex-start; gap:16px;">
+          <h2>Resultado — {{ result.ticker }}</h2>
+          {% set status = result.status %}
+          <span class="status-pill status-{{ status.code }}">{{ status.label }}</span>
+        </div>
+        <div class="result-meta">
+          <span><strong>Aporte:</strong> R$ {{ "{:,.2f}".format(result.aporte) }}</span>
+          <span><strong>Perfil:</strong> {{ result.profile }}</span>
+          <span><strong>Período:</strong> {{ result.start }} → {{ result.end or 'atual' }}</span>
+          <span><strong>Execução:</strong> {{ result.ts }}</span>
+        </div>
+
+        <div class="status-detail">{{ result.status.detail }}</div>
+
+        <div class="muted">Visão filtrada para {{ result.ref_month or 'todo o período' }} — {{ result.filtered_trades_count }} operações.</div>
+
+        <div class="dashboard-grid">
+          <div class="info-card">
+            <h3 class="info-title">Resumo da carteira</h3>
+            <div class="info-row">
+              <span class="info-label">Valor atual</span>
+              <span class="info-value value-neutral">
+                {% if result.portfolio_summary.current_value is not none %}
+                  R$ {{ "{:,.2f}".format(result.portfolio_summary.current_value) }}
+                {% else %}—{% endif %}
+              </span>
+            </div>
+            {% set pnl = result.portfolio_summary.pnl %}
+            {% set pnl_class = 'value-neutral' %}
+            {% if pnl is not none %}
+              {% if pnl > 0 %}{% set pnl_class = 'value-positive' %}{% elif pnl < 0 %}{% set pnl_class = 'value-negative' %}{% endif %}
+            {% endif %}
+            <div class="info-row">
+              <span class="info-label">P/L acumulado</span>
+              <span class="info-value {{ pnl_class }}">
+                {% if pnl is not none %}
+                  R$ {{ "{:,.2f}".format(pnl) }}
+                {% else %}—{% endif %}
+              </span>
+            </div>
+            {% set pnl_pct = result.portfolio_summary.pnl_pct %}
+            {% set pct_class = 'value-neutral' %}
+            {% if pnl_pct is not none %}
+              {% if pnl_pct > 0 %}{% set pct_class = 'value-positive' %}{% elif pnl_pct < 0 %}{% set pct_class = 'value-negative' %}{% endif %}
+            {% endif %}
+            <div class="info-row">
+              <span class="info-label">% acumulado</span>
+              <span class="info-value {{ pct_class }}">
+                {% if pnl_pct is not none %}
+                  {{ "{:,.2f}%".format(pnl_pct) }}
+                {% else %}—{% endif %}
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Máx. valor</span>
+              <span class="info-value">
+                {% if result.portfolio_summary.peak_value is not none %}
+                  R$ {{ "{:,.2f}".format(result.portfolio_summary.peak_value) }}
+                {% else %}—{% endif %}
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Mín. valor</span>
+              <span class="info-value">
+                {% if result.portfolio_summary.min_value is not none %}
+                  R$ {{ "{:,.2f}".format(result.portfolio_summary.min_value) }}
+                {% else %}—{% endif %}
+              </span>
+            </div>
+          </div>
+
+          <div class="info-card">
+            <h3 class="info-title">Operação atual</h3>
+            {% if result.current_trade %}
+              <div class="info-row">
+                <span class="info-label">Entrada</span>
+                <span class="info-value">{{ result.current_trade.entry_ts or '—' }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Qtde</span>
+                <span class="info-value">
+                  {% if result.current_trade.size is not none %}
+                    {{ "{:,.0f}".format(result.current_trade.size) }}
+                  {% else %}—{% endif %}
+                </span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Preço médio</span>
+                <span class="info-value">
+                  {% if result.current_trade.entry_price is not none %}
+                    R$ {{ "{:,.2f}".format(result.current_trade.entry_price) }}
+                  {% else %}—{% endif %}
+                </span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Preço atual</span>
+                <span class="info-value">
+                  {% if result.current_trade.last_price is not none %}
+                    R$ {{ "{:,.2f}".format(result.current_trade.last_price) }}
+                  {% else %}—{% endif %}
+                </span>
+              </div>
+              {% set ct_pnl = result.current_trade.pnl %}
+              {% set ct_class = 'value-neutral' %}
+              {% if ct_pnl is not none %}
+                {% if ct_pnl > 0 %}{% set ct_class = 'value-positive' %}{% elif ct_pnl < 0 %}{% set ct_class = 'value-negative' %}{% endif %}
+              {% endif %}
+              <div class="info-row">
+                <span class="info-label">P/L</span>
+                <span class="info-value {{ ct_class }}">
+                  {% if ct_pnl is not none %}
+                    R$ {{ "{:,.2f}".format(ct_pnl) }}
+                  {% else %}—{% endif %}
+                </span>
+              </div>
+              {% set ct_ret = result.current_trade.return_pct %}
+              {% set ct_ret_class = 'value-neutral' %}
+              {% if ct_ret is not none %}
+                {% if ct_ret > 0 %}{% set ct_ret_class = 'value-positive' %}{% elif ct_ret < 0 %}{% set ct_ret_class = 'value-negative' %}{% endif %}
+              {% endif %}
+              <div class="info-row">
+                <span class="info-label">Retorno</span>
+                <span class="info-value {{ ct_ret_class }}">
+                  {% if ct_ret is not none %}
+                    {{ "{:,.2f}%".format(ct_ret) }}
+                  {% else %}—{% endif %}
+                </span>
+              </div>
+            {% else %}
+              <p class="empty-state">Nenhuma posição aberta no momento.</p>
+            {% endif %}
+          </div>
+
+          <div class="info-card">
+            <h3 class="info-title">Operações abertas</h3>
+            <div class="info-row">
+              <span class="info-label">Quantidade</span>
+              <span class="info-value">{{ result.open_summary.count }}</span>
+            </div>
+            {% set open_pnl = result.open_summary.pnl %}
+            {% set open_class = 'value-neutral' %}
+            {% if open_pnl is not none %}
+              {% if open_pnl > 0 %}{% set open_class = 'value-positive' %}{% elif open_pnl < 0 %}{% set open_class = 'value-negative' %}{% endif %}
+            {% endif %}
+            <div class="info-row">
+              <span class="info-label">P/L total</span>
+              <span class="info-value {{ open_class }}">
+                {% if open_pnl is not none %}
+                  R$ {{ "{:,.2f}".format(open_pnl) }}
+                {% else %}—{% endif %}
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Retorno médio</span>
+              {% set open_ret = result.open_summary.return_pct %}
+              {% set open_ret_class = 'value-neutral' %}
+              {% if open_ret is not none %}
+                {% if open_ret > 0 %}{% set open_ret_class = 'value-positive' %}{% elif open_ret < 0 %}{% set open_ret_class = 'value-negative' %}{% endif %}
+              {% endif %}
+              <span class="info-value {{ open_ret_class }}">
+                {% if open_ret is not none %}
+                  {{ "{:,.2f}%".format(open_ret) }}
+                {% else %}—{% endif %}
+              </span>
+            </div>
+          </div>
+
+          <div class="info-card">
+            <h3 class="info-title">Operações finalizadas</h3>
+            <div class="info-row">
+              <span class="info-label">Quantidade</span>
+              <span class="info-value">{{ result.closed_summary.count }}</span>
+            </div>
+            {% set closed_pnl = result.closed_summary.pnl %}
+            {% set closed_class = 'value-neutral' %}
+            {% if closed_pnl is not none %}
+              {% if closed_pnl > 0 %}{% set closed_class = 'value-positive' %}{% elif closed_pnl < 0 %}{% set closed_class = 'value-negative' %}{% endif %}
+            {% endif %}
+            <div class="info-row">
+              <span class="info-label">P/L total</span>
+              <span class="info-value {{ closed_class }}">
+                {% if closed_pnl is not none %}
+                  R$ {{ "{:,.2f}".format(closed_pnl) }}
+                {% else %}—{% endif %}
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Retorno médio</span>
+              {% set closed_ret = result.closed_summary.return_pct %}
+              {% set closed_ret_class = 'value-neutral' %}
+              {% if closed_ret is not none %}
+                {% if closed_ret > 0 %}{% set closed_ret_class = 'value-positive' %}{% elif closed_ret < 0 %}{% set closed_ret_class = 'value-negative' %}{% endif %}
+              {% endif %}
+              <span class="info-value {{ closed_ret_class }}">
+                {% if closed_ret is not none %}
+                  {{ "{:,.2f}%".format(closed_ret) }}
+                {% else %}—{% endif %}
+              </span>
+            </div>
+          </div>
+
+          {% if result.last_closed_trade %}
+            <div class="info-card">
+              <h3 class="info-title">Última operação encerrada</h3>
+              <div class="info-row">
+                <span class="info-label">Entrada</span>
+                <span class="info-value">{{ result.last_closed_trade.entry_ts or '—' }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Saída</span>
+                <span class="info-value">{{ result.last_closed_trade.exit_ts or '—' }}</span>
+              </div>
+              {% set lc_pnl = result.last_closed_trade.pnl %}
+              {% set lc_class = 'value-neutral' %}
+              {% if lc_pnl is not none %}
+                {% if lc_pnl > 0 %}{% set lc_class = 'value-positive' %}{% elif lc_pnl < 0 %}{% set lc_class = 'value-negative' %}{% endif %}
+              {% endif %}
+              <div class="info-row">
+                <span class="info-label">P/L</span>
+                <span class="info-value {{ lc_class }}">
+                  {% if lc_pnl is not none %}
+                    R$ {{ "{:,.2f}".format(lc_pnl) }}
+                  {% else %}—{% endif %}
+                </span>
+              </div>
+              {% set lc_ret = result.last_closed_trade.return_pct %}
+              {% set lc_ret_class = 'value-neutral' %}
+              {% if lc_ret is not none %}
+                {% if lc_ret > 0 %}{% set lc_ret_class = 'value-positive' %}{% elif lc_ret < 0 %}{% set lc_ret_class = 'value-negative' %}{% endif %}
+              {% endif %}
+              <div class="info-row">
+                <span class="info-label">Retorno</span>
+                <span class="info-value {{ lc_ret_class }}">
+                  {% if lc_ret is not none %}
+                    {{ "{:,.2f}%".format(lc_ret) }}
+                  {% else %}—{% endif %}
+                </span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Direção</span>
+                <span class="info-value">{{ result.last_closed_trade.direction or '—' }}</span>
+              </div>
+            </div>
           {% endif %}
         </div>
-      </div>
-    </div>
 
-    {% if result %}
-      <h2>Resultado – {{ result.ticker }}</h2>
-      <p>Resumo: <code>{{ result.summary_path }}</code><br/>Trades: <code>{{ result.trades_path }}</code></p>
-      {% if result.row %}
-        <table>
-          <tr>
-            {% for k in result.row.keys() %}
-              <th>{{k}}</th>
+        {% if result.row %}
+          {% set labels = {
+            'Total Return [%]': 'Retorno total',
+            'Sharpe Ratio': 'Sharpe',
+            'Win Rate [%]': 'Win rate',
+            'Max Drawdown [%]': 'Max DD',
+            'Trades': 'Trades'
+          } %}
+          <div class="metrics-grid">
+            {% for key, label in labels.items() if key in result.row %}
+              <div class="metric-card">
+                <span class="metric-label">{{ label }}</span>
+                <span class="metric-value">{{ result.row[key] }}</span>
+              </div>
             {% endfor %}
-          </tr>
-          <tr>
-            {% for v in result.row.values() %}
-              <td>{{v}}</td>
-            {% endfor %}
-          </tr>
-        </table>
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table>
+              <thead>
+                <tr>
+                  {% for k in result.row.keys() %}
+                    <th>{{ k }}</th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  {% for v in result.row.values() %}
+                    <td>{{ v }}</td>
+                  {% endfor %}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+
+        <div class="file-paths">
+          <div>Resumo salvo em <code>{{ result.summary_path }}</code></div>
+          {% if result.trades_path %}
+            <div>Trades detalhados em <code>{{ result.trades_path }}</code></div>
+          {% endif %}
+        </div>
+      </section>
+
+      {% if result.trades_preview and result.trades_columns %}
+        <section class="card">
+          <h2>Prévia das trades (top 10)</h2>
+          <div style="overflow-x: auto;">
+            <table>
+              <thead>
+                <tr>
+                  {% for col in result.trades_columns %}
+                    <th>{{ col }}</th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for trade in result.trades_preview %}
+                  <tr>
+                    {% for col in result.trades_columns %}
+                      <td>{{ trade[col] }}</td>
+                    {% endfor %}
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <p class="muted">Abra o CSV completo para analisar todas as operações e validar o comportamento do modelo.</p>
+        </section>
       {% endif %}
+      {% endfor %}
     {% endif %}
 
-  </body>
-  </html>
+    <script>
+      (function() {
+        const periodSelect = document.getElementById('period');
+        const startInput = document.getElementById('start');
+        const endInput = document.getElementById('end');
 
+        if (!periodSelect || !startInput || !endInput) {
+          return;
+        }
+
+        const recalcStart = (days) => {
+          const endDate = endInput.value ? new Date(endInput.value) : new Date();
+          if (Number.isNaN(endDate.getTime())) {
+            return;
+          }
+          const startDate = new Date(endDate);
+          startDate.setDate(startDate.getDate() - days);
+          const iso = startDate.toISOString().slice(0, 10);
+          startInput.value = iso;
+        };
+
+        periodSelect.addEventListener('change', (event) => {
+          const target = event.target;
+          const selected = target.options[target.selectedIndex];
+          const daysAttr = selected.getAttribute('data-days');
+          if (daysAttr) {
+            recalcStart(parseInt(daysAttr, 10));
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>
