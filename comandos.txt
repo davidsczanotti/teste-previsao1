@@ -25,6 +25,29 @@ poetry run python scripts/clean_repo.py
 poetry run python -m src.run_experiment --config configs/baseline.yaml
 
 
+****************************
+Construir a imagem (apenas uma vez por alteração):
+
+cd /caminho/para/teste-previsao1
+docker build -t teste-previsao1:latest .
+Se o servidor exigir sudo, use sudo docker build ....
+
+Depois execute o container normalmente (com ou sem sudo, conforme necessário):
+
+docker run -d --name previsao-web \
+  -p 5000:5000 \
+  -e FLASK_DEBUG=0 \
+  -v $(pwd)/reports:/app/reports \
+  teste-previsao1:latest
+Se já havia alguma execução antiga com o mesmo nome, remova ou renomeie antes de subir novamente:
+
+docker stop previsao-web && docker rm previsao-web
+Assim a imagem fica registrada localmente e o docker run passa a encontrá-la.
+
+
+****************************
+
+
 wsl->git push -u origin main
 server->git pull origin main
 
