@@ -443,16 +443,22 @@ def index():
 
     current_month = today.strftime("%Y-%m")
 
+    from src.app_config import get_config
+    cfg_defaults = get_config()
+    def_mode = cfg_defaults.get("default_mode", "full")
+    def_ctx = cfg_defaults.get("context_months", "auto")
+
     form_state = {
         "ticker": tickers[0] if tickers else "",
         "aporte": "100000",
         "start": default_start,
         "end": default_end,
         "profile": "B",
-        "period": "auto",
+        "period": def_ctx if def_ctx in {"auto", "6", "12", "24"} else "auto",
         "ref_month": current_month,
         "paper_live": "1",
         "advanced": "0",
+        "nhits_mode": def_mode if def_mode in {"fast", "full"} else "full",
     }
 
     result = None
@@ -468,6 +474,7 @@ def index():
                 "ref_month": request.form.get("ref_month") or form_state["ref_month"],
                 "paper_live": request.form.get("paper_live", form_state["paper_live"]),
                 "advanced": request.form.get("advanced", form_state["advanced"]),
+                "nhits_mode": request.form.get("nhits_mode", form_state["nhits_mode"]),
             }
         )
 
@@ -480,6 +487,7 @@ def index():
         paper_live = True if str(form_state.get("paper_live", "1")) in {"1", "true", "on", "True"} else False
         advanced = True if str(form_state.get("advanced", "0")) in {"1", "true", "on", "True"} else False
         period_mode = form_state.get("period", "auto")
+        nhits_mode = form_state.get("nhits_mode", "full")
 
         # Contexto de treino seguro: se não avançado, força automação/6-24m
         try:
@@ -487,7 +495,7 @@ def index():
             if not advanced:
                 # Fixa end no último pregão (já calculado). Recalcula start
                 end_dt = datetime.fromisoformat(form_state["end"]) if form_state.get("end") else datetime.today()
-                months_map = {"m6": 6, "m12": 12, "m24": 24}
+                months_map = {"m6": 6, "m12": 12, "m24": 24, "6": 6, "12": 12, "24": 24, "auto": 12}
                 months = months_map.get(period_mode, 12)
                 # 12 meses por padrão (auto)
                 from pandas import DateOffset
@@ -502,11 +510,11 @@ def index():
         # Pré-cheque: barras mínimas para NHITS
         precheck = {}
         try:
-            # Hiperparâmetros padrão usados no web_app
+            # Hiperparâmetros usados no web_app
             horizon = 5
             input_size = 60
-            n_windows = 24
-            step_size = 5
+            n_windows = 12 if nhits_mode == "fast" else 24
+            step_size = 10 if nhits_mode == "fast" else 5
             required_bars = max(180, input_size * 4, n_windows * step_size + input_size + horizon + 60)
             close_chk = get_prices([ticker], start=start, end=end).sort_index()
             bars = int(close_chk.shape[0])
@@ -562,6 +570,7 @@ def index():
                     profile=profile,
                     ref_month=ref_month,
                     paper_live=paper_live,
+                    nhits_mode=nhits_mode,
                 )
                 if precheck:
                     result["precheck"] = precheck
@@ -610,6 +619,11 @@ def config_page():
             "market_open": request.form.get("market_open", cfg.get("market_open", "10:00")),
             "market_close": request.form.get("market_close", cfg.get("market_close", "18:00")),
             "universe_path": request.form.get("universe_path", cfg.get("universe_path", "configs/universe_b3.txt")),
+            # Defaults de treino/execução
+            "default_mode": request.form.get("default_mode", cfg.get("default_mode", "full")),
+            "context_months": request.form.get("context_months", cfg.get("context_months", "auto")),
+            "auto_adjust": request.form.get("auto_adjust", cfg.get("auto_adjust", "1")),
+            "min_input_size": request.form.get("min_input_size", cfg.get("min_input_size", "30")),
         }
         set_config(new_cfg)
         flash("Configuração salva.", "success")

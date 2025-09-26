@@ -370,6 +370,14 @@
           </div>
 
           <div class="field">
+            <label for="nhits_mode">NHITS – modo</label>
+            <select name="nhits_mode" id="nhits_mode">
+              <option value="full" {% if form.nhits_mode == 'full' %}selected{% endif %}>Completo (n_windows=24)</option>
+              <option value="fast" {% if form.nhits_mode == 'fast' %}selected{% endif %}>Rápido (n_windows=12)</option>
+            </select>
+          </div>
+
+          <div class="field">
             <label for="profile">Perfil</label>
             <select name="profile" id="profile">
               <option value="A" {% if form.profile == 'A' %}selected{% endif %}>A — foco em retorno</option>
@@ -461,6 +469,9 @@
           <div class="status-detail">
             Pré‑cheque: Sem lookahead (OK) · Paper‑Live ({{ 'ON' if result.precheck.paper_live else 'OFF' }}) · Barras: {{ result.precheck.bars_available }}/{{ result.precheck.required_bars }} ({{ 'OK' if result.precheck.ok_bars else 'Insuficiente' }})
           </div>
+        {% endif %}
+        {% if result.adjustments %}
+          <div class="status-detail">Ajustes aplicados: {{ result.adjustments }}</div>
         {% endif %}
         <div class="result-meta">
           <span><strong>Aporte:</strong> R$ {{ "{:,.2f}".format(result.aporte) }}</span>

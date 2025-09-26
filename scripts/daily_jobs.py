@@ -15,11 +15,37 @@ def main(argv=None) -> None:
     # EOD: exemplo chama o scan do universo para registrar métricas diárias
     cfg = get_config()
     universe = cfg.get("universe_path", "configs/universe_b3.txt")
+    mode = cfg.get("default_mode", "full")
+    months_raw = cfg.get("context_months", "auto")
+    try:
+        months = 12 if months_raw == "auto" else int(months_raw)
+    except Exception:
+        months = 12
+
+    from datetime import date
+    from pandas import DateOffset, Timestamp
+    end_dt = date.today()
+    start_dt = (Timestamp(end_dt) - DateOffset(months=months)).date()
+
+    if mode == "fast":
+        n_windows, step_size, max_steps = 12, 10, 30
+    else:
+        n_windows, step_size, max_steps = 24, 5, 50
     if args.job == "eod":
-        cmd = [sys.executable, "-m", "scripts.run_universe_scan", "--universe", universe, "--batch-size", "20", "--start", "2018-01-01"]
+        cmd = [
+            sys.executable, "-m", "scripts.run_universe_scan",
+            "--universe", universe, "--batch-size", "20",
+            "--start", str(start_dt),
+            "--n-windows", str(n_windows), "--step-size", str(step_size), "--max-steps", str(max_steps),
+        ]
     else:
         # morning: reexecuta o scan leve para atualizar ranking / aquecimento de modelos
-        cmd = [sys.executable, "-m", "scripts.run_universe_scan", "--universe", universe, "--batch-size", "20", "--start", "2018-01-01"]
+        cmd = [
+            sys.executable, "-m", "scripts.run_universe_scan",
+            "--universe", universe, "--batch-size", "20",
+            "--start", str(start_dt),
+            "--n-windows", str(n_windows), "--step-size", str(step_size), "--max-steps", str(max_steps),
+        ]
 
     print(f"[daily_jobs] running: {' '.join(cmd)}")
     Path("reports").mkdir(parents=True, exist_ok=True)

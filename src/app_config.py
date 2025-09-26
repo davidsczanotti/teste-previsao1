@@ -13,6 +13,10 @@ DEFAULTS: Dict[str, str] = {
     "market_open": "10:00",
     "market_close": "18:00",
     "universe_path": "configs/universe_b3.txt",
+    "default_mode": "full",           # 'fast' | 'full'
+    "context_months": "auto",         # 'auto' | '6' | '12' | '24'
+    "auto_adjust": "1",               # tentar ajustar automaticamente
+    "min_input_size": "30",           # limite inferior ao reduzir input_size
 }
 
 
@@ -46,4 +50,3 @@ def set_config(kv: Dict[str, str]) -> None:
         )
     conn.commit()
     conn.close()
-

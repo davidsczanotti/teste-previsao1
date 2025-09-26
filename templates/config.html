@@ -60,6 +60,32 @@
             <label for="universe_path">Universo (arquivo)</label>
             <input id="universe_path" type="text" name="universe_path" value="{{ cfg.universe_path }}" />
           </div>
+          <div class="field">
+            <label for="default_mode">NHITS – modo padrão</label>
+            <select id="default_mode" name="default_mode">
+              <option value="full" {% if cfg.default_mode == 'full' %}selected{% endif %}>Completo (n_windows=24)</option>
+              <option value="fast" {% if cfg.default_mode == 'fast' %}selected{% endif %}>Rápido (n_windows=12)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="context_months">Contexto padrão (meses)</label>
+            <select id="context_months" name="context_months">
+              <option value="auto" {% if cfg.context_months == 'auto' %}selected{% endif %}>Automático</option>
+              <option value="6" {% if cfg.context_months == '6' %}selected{% endif %}>6</option>
+              <option value="12" {% if cfg.context_months == '12' %}selected{% endif %}>12</option>
+              <option value="24" {% if cfg.context_months == '24' %}selected{% endif %}>24</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>
+              <input type="checkbox" name="auto_adjust" {% if cfg.auto_adjust in ['1','true','True'] %}checked{% endif %} />
+              Ajuste automático (expandir histórico / reduzir input_size)
+            </label>
+          </div>
+          <div class="field">
+            <label for="min_input_size">input_size mínimo (ajuste auto)</label>
+            <input id="min_input_size" type="number" min="10" step="5" name="min_input_size" value="{{ cfg.min_input_size or '30' }}" />
+          </div>
         </div>
         <div class="actions" style="display:flex; gap:12px; align-items:center;">
           <button type="submit">Salvar</button>
