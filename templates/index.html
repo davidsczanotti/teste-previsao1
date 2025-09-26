@@ -311,8 +311,15 @@
   </head>
   <body>
     <header>
-      <h1>Paper Trading – Painel de Simulação</h1>
-      <p class="subtitle">Simule aportes fictícios, execute o modelo NHITS e acompanhe as métricas de cada ticker.</p>
+      <div style="display:flex; justify-content: space-between; align-items: baseline; gap: 12px;">
+        <div>
+          <h1>Paper Trading – Painel de Simulação</h1>
+          <p class="subtitle">Simule aportes fictícios, execute o modelo NHITS e acompanhe as métricas de cada ticker.</p>
+        </div>
+        <div>
+          <a href="{{ url_for('config_page') }}">Configurações</a>
+        </div>
+      </div>
     </header>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -373,6 +380,13 @@
           <div class="field">
             <label for="ref_month">Mês de referência (YYYY-MM)</label>
             <input type="month" id="ref_month" name="ref_month" value="{{ form.ref_month }}" />
+          </div>
+
+          <div class="field">
+            <label>
+              <input type="checkbox" name="paper_live" {% if form.paper_live in ['1','true','on','True'] %}checked{% endif %} />
+              Operar apenas a partir do último pregão (Paper‑Live)
+            </label>
           </div>
 
           <button type="submit">Executar simulação</button>
@@ -438,9 +452,15 @@
           {% if result.last_bar %}
           <span><strong>Dados até:</strong> {{ result.last_bar }} (último pregão)</span>
           {% endif %}
+          {% if result.go_live_day %}
+          <span><strong>Go‑Live:</strong> {{ result.go_live_day }}</span>
+          {% endif %}
         </div>
 
         <div class="status-detail">{{ result.status.detail }}</div>
+        {% if result.paper_live and result.planned_entry %}
+          <div class="status-detail">Compra agendada para o próximo pregão (há sinal de entrada em {{ result.last_bar }}).</div>
+        {% endif %}
 
         <div class="muted">Visão filtrada para {{ result.ref_month or 'todo o período' }} — {{ result.filtered_trades_count }} operações.</div>
 

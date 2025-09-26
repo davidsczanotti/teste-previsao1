@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Configurações</title>
+    <style>
+      body { font-family: system-ui, Arial, sans-serif; margin: 20px; }
+      .card { border: 1px solid #ddd; border-radius: 8px; padding: 16px; }
+      .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+      label { font-weight: 600; }
+      input[type="text"], input[type="time"], input[type="checkbox"] { padding: 6px 8px; }
+      .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+      .actions { margin-top: 16px; }
+      a { text-decoration: none; }
+      .muted { color: #666; }
+      .flash { padding: 8px 10px; margin-bottom: 10px; border-radius: 4px; }
+      .success { background: #eaf7ea; color: #1c5c1c; }
+      .error { background: #fdecea; color: #8a1f15; }
+    </style>
+  </head>
+  <body>
+    <h1>Configurações</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for cat, msg in messages %}
+          <div class="flash {{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="card">
+      <form method="post">
+        <div class="row">
+          <div class="field">
+            <label>
+              <input type="checkbox" name="scheduler_enabled" {% if cfg.scheduler_enabled in ['1','true','True'] %}checked{% endif %} />
+              Agendador habilitado
+            </label>
+          </div>
+          <div class="field">
+            <label for="am_time">Horário diária (manhã)</label>
+            <input id="am_time" type="time" name="am_time" value="{{ cfg.am_time }}" />
+            <span class="muted">Ex.: 08:00</span>
+          </div>
+          <div class="field">
+            <label for="eod_time">Horário EOD (pós-fechamento)</label>
+            <input id="eod_time" type="time" name="eod_time" value="{{ cfg.eod_time }}" />
+            <span class="muted">Ex.: 20:05</span>
+          </div>
+          <div class="field">
+            <label for="market_open">Abertura de mercado</label>
+            <input id="market_open" type="time" name="market_open" value="{{ cfg.market_open }}" />
+          </div>
+          <div class="field">
+            <label for="market_close">Fechamento de mercado</label>
+            <input id="market_close" type="time" name="market_close" value="{{ cfg.market_close }}" />
+          </div>
+          <div class="field">
+            <label for="universe_path">Universo (arquivo)</label>
+            <input id="universe_path" type="text" name="universe_path" value="{{ cfg.universe_path }}" />
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit">Salvar</button>
+          <a href="{{ url_for('index') }}">Voltar</a>
+        </div>
+      </form>
+    </div>
+  </body>
+  </html>
+

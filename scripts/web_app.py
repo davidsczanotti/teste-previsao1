@@ -7,8 +7,10 @@ import sys
 from collections import OrderedDict
 from typing import List, Any, Optional
 
-from flask import Flask, render_template, request, flash
+from flask import Flask, render_template, request, flash, redirect, url_for
 import pandas as pd
+import threading
+import time
 
 from src.ingest import get_prices
 from src.prep import prepare_long_and_features
@@ -17,6 +19,8 @@ from src.signals import build_signals_from_forecast
 from src.backtest import run_backtest
 from src.config import Cfg
 from src.exp_store import log_run, last_runs
+from src.user_state import get_go_live_date, set_go_live_date, reset_go_live
+from src.app_config import get_config, set_config
 
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -85,6 +89,7 @@ def run_pipeline_for_ticker(
     end: str | None = None,
     profile: str = "B",  # A ou B
     ref_month: Optional[str] = None,
+    paper_live: bool = True,
 ) -> dict:
     # Config de perfil
     lead = 2
@@ -146,24 +151,69 @@ def run_pipeline_for_ticker(
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_path = Path("reports") / f"web_summary_{ticker}_{ts}.csv"
 
+    # Paper-Live: operar só a partir do último pregão (T-1)
+    last_bar = close.index.max()
+    planned_entry = False
+    # Data de início (go-live) persistida por ticker
+    go_live_day_str = get_go_live_date(ticker) if paper_live else None
+    if go_live_day_str is not None:
+        try:
+            go_live_ts = pd.to_datetime(go_live_day_str)
+        except Exception:
+            go_live_ts = last_bar
+    else:
+        go_live_ts = last_bar
+        if paper_live:
+            # Persistir primeira data de go-live
+            try:
+                set_go_live_date(ticker, str(go_live_ts.date()), profile=profile, aporte=float(aporte))
+            except Exception:
+                pass
+
+    if paper_live and ticker in signals:
+        try:
+            planned_entry = bool(
+                signals[ticker]["entries"].reindex(close.index, fill_value=False).iloc[-1]
+            )
+        except Exception:
+            planned_entry = False
+
+    bt_close = close.loc[go_live_ts:] if paper_live else close
+
+    # recortar sinais para o índice do bt_close
+    signals_live: dict[str, dict[str, pd.Series]] = {}
+    for t in close.columns:
+        sig = signals.get(t, {})
+        e = sig.get("entries", pd.Series(False, index=close.index))
+        x = sig.get("exits", pd.Series(False, index=close.index))
+        e_live = e.reindex(bt_close.index, fill_value=False)
+        x_live = x.reindex(bt_close.index, fill_value=False)
+        signals_live[t] = {"entries": e_live, "exits": x_live}
+
     summary, pf = run_backtest(
-        close_wide=close,
-        signals=signals,
+        close_wide=bt_close,
+        signals=signals_live,
         init_cash=aporte,
         fees=0.0005,
         slippage=0.0005,
         direction="longonly",
-        save_trades=True,
+        save_trades=False,  # evitar sobrescrever arquivos genéricos
         report_path=report_path,
         size_wide=size_wide,
         aggregate_portfolio=False,
     )
 
-    # Copiar trades para arquivo único por execução
-    trades_src = Path("reports") / f"trades_{ticker}.csv"
-    trades_dst = Path("reports") / f"web_trades_{ticker}_{ts}.csv"
-    if trades_src.exists():
-        trades_dst.write_text(trades_src.read_text())
+    # Salvar trades "web" diretamente do portfolio retornado
+    trades_dst: Path | None = None
+    trades_df: pd.DataFrame | None = None
+    try:
+        pf_t = pf.get(ticker)
+        if pf_t is not None:
+            trades_df = pf_t.trades.records_readable
+            trades_dst = Path("reports") / f"web_trades_{ticker}_{ts}.csv"
+            trades_df.to_csv(trades_dst, index=False)
+    except Exception:
+        trades_dst = None
 
     # Registrar no registry
     cfg = Cfg.parse_obj(
@@ -212,11 +262,9 @@ def run_pipeline_for_ticker(
 
     trades_columns: list[str] = []
     trades_preview: list[dict[str, object]] = []
-    trades_df: pd.DataFrame | None = None
     filtered_trades_df: pd.DataFrame | None = None
-    if trades_dst.exists():
+    if trades_df is not None and not trades_df.empty:
         try:
-            trades_df = pd.read_csv(trades_dst)
             trades_columns = list(trades_df.columns)
             if ref_month:
                 try:
@@ -356,7 +404,7 @@ def run_pipeline_for_ticker(
     return {
         "ticker": ticker,
         "summary_path": str(report_path),
-        "trades_path": str(trades_dst) if trades_dst.exists() else None,
+        "trades_path": str(trades_dst) if (trades_dst is not None and trades_dst.exists()) else None,
         "row": row,
         "ts": ts,
         "start": start,
@@ -374,6 +422,9 @@ def run_pipeline_for_ticker(
         "ref_month": ref_month,
         "filtered_trades_count": int(len(analytics_df)) if analytics_df is not None else 0,
         "last_bar": str(close.index.max().date()) if not close.empty else None,
+        "paper_live": bool(paper_live),
+        "planned_entry": bool(planned_entry),
+        "go_live_day": str(go_live_ts.date()) if paper_live else None,
     }
 
 
@@ -399,6 +450,7 @@ def index():
         "profile": "B",
         "period": "custom",
         "ref_month": current_month,
+        "paper_live": "1",
     }
 
     result = None
@@ -412,6 +464,7 @@ def index():
                 "profile": request.form.get("profile") or form_state["profile"],
                 "period": request.form.get("period") or "custom",
                 "ref_month": request.form.get("ref_month") or form_state["ref_month"],
+                "paper_live": request.form.get("paper_live", form_state["paper_live"]),
             }
         )
 
@@ -421,6 +474,7 @@ def index():
         end = form_state["end"] or None
         profile = form_state["profile"]
         ref_month = form_state["ref_month"]
+        paper_live = True if str(form_state.get("paper_live", "1")) in {"1", "true", "on", "True"} else False
 
         try:
             aporte_val = float(aporte_raw or 100000)
@@ -449,6 +503,7 @@ def index():
                     end=end,
                     profile=profile,
                     ref_month=ref_month,
+                    paper_live=paper_live,
                 )
                 # manter cache ordenado por ticker recente
                 if ticker in LATEST_RESULTS:
@@ -483,7 +538,66 @@ def create_app() -> Flask:
     return APP
 
 
+# Config UI
+@APP.route("/config", methods=["GET", "POST"])
+def config_page():
+    cfg = get_config()
+    if request.method == "POST":
+        new_cfg = {
+            "scheduler_enabled": request.form.get("scheduler_enabled", "0"),
+            "eod_time": request.form.get("eod_time", cfg.get("eod_time", "20:05")),
+            "am_time": request.form.get("am_time", cfg.get("am_time", "08:00")),
+            "market_open": request.form.get("market_open", cfg.get("market_open", "10:00")),
+            "market_close": request.form.get("market_close", cfg.get("market_close", "18:00")),
+            "universe_path": request.form.get("universe_path", cfg.get("universe_path", "configs/universe_b3.txt")),
+        }
+        set_config(new_cfg)
+        flash("Configuração salva.", "success")
+        return redirect(url_for("config_page"))
+    return render_template("config.html", cfg=cfg)
+
+
+@APP.route("/reset_go_live", methods=["POST"])
+def reset_go_live_route():
+    ticker = request.form.get("ticker")
+    if ticker:
+        try:
+            reset_go_live(ticker)
+            flash(f"Go‑Live de {ticker} resetado.", "success")
+        except Exception as exc:
+            flash(f"Falha ao resetar Go‑Live: {exc}", "error")
+    return redirect(url_for("index"))
+
+
 if __name__ == "__main__":
     debug_flag = os.getenv("FLASK_DEBUG", "0") in {"1", "true", "True"}
     port = int(os.getenv("PORT", "5000"))
+
+    # Agendador simples dentro do processo, controlado por /config
+    cfg0 = get_config()
+
+    def _should_run(now_hm: str, target_hm: str, last_run: dict, key: str) -> bool:
+        if now_hm == target_hm and last_run.get(key) != time.strftime("%Y-%m-%d"):
+            last_run[key] = time.strftime("%Y-%m-%d")
+            return True
+        return False
+
+    def _scheduler_loop():
+        last_run = {}
+        while True:
+            try:
+                hm = time.strftime("%H:%M")
+                cfg = get_config()
+                if cfg.get("scheduler_enabled", "1") in {"1", "true", "True"}:
+                    eod = cfg.get("eod_time", cfg0.get("eod_time", "20:05"))
+                    am = cfg.get("am_time", cfg0.get("am_time", "08:00"))
+                    if _should_run(hm, eod, last_run, "eod"):
+                        threading.Thread(target=lambda: os.system(f"{sys.executable} -m scripts.daily_jobs --job eod"), daemon=True).start()
+                    if _should_run(hm, am, last_run, "morning"):
+                        threading.Thread(target=lambda: os.system(f"{sys.executable} -m scripts.daily_jobs --job morning"), daemon=True).start()
+            except Exception:
+                pass
+            time.sleep(30)
+
+    threading.Thread(target=_scheduler_loop, daemon=True).start()
     APP.run(host="0.0.0.0", port=port, debug=debug_flag)
