@@ -91,6 +91,7 @@ def run_pipeline_for_ticker(
     profile: str = "B",  # A ou B
     ref_month: Optional[str] = None,
     paper_live: bool = True,
+    nhits_mode: str = "full",
 ) -> dict:
     # Config de perfil
     lead = 2
@@ -107,13 +108,19 @@ def run_pipeline_for_ticker(
     prep_out = prepare_long_and_features(close)
     long_df = prep_out if isinstance(prep_out, pd.DataFrame) else prep_out["long_df"]
 
+    # Hiperparâmetros conforme modo selecionado
+    if nhits_mode == "fast":
+        _n_windows, _step_size, _max_steps = 12, 10, 30
+    else:
+        _n_windows, _step_size, _max_steps = 24, 5, 50
+
     yhat = train_predict_nhits(
         long_df=long_df,
         horizon=5,
         input_size=60,
-        n_windows=24,
-        step_size=5,
-        max_steps=50,
+        n_windows=_n_windows,
+        step_size=_step_size,
+        max_steps=_max_steps,
         seed=1,
         lead_for_signal=lead,
     )
@@ -223,9 +230,9 @@ def run_pipeline_for_ticker(
             "model": {
                 "horizon": 5,
                 "input_size": 60,
-                "n_windows": 24,
-                "step_size": 5,
-                "max_steps": 50,
+                "n_windows": _n_windows,
+                "step_size": _step_size,
+                "max_steps": _max_steps,
                 "seed": 1,
                 "lead_for_signal": lead,
             },
