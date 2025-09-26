@@ -1,288 +1,167 @@
-# teste-previsao1 — Pipeline de previsão (NHITS) + Backtest (vectorbt)
+# teste-previsao1 — Previsão (NHITS) + Backtest (vectorbt) + Web
 
-> Pipeline completo para baixar preços, treinar NHITS (NeuralForecast), gerar sinais e rodar backtest **sem look‑ahead** com vectorbt.
+Pipeline completo para baixar preços, treinar NHITS (NeuralForecast), gerar sinais e rodar backtest sem look‑ahead. Inclui frontend Flask com modo Paper‑Live, agendador e página de configuração.
 
 ---
 
 ## Sumário rápido
-- **Ingestão:** `src/ingest.py` → DataFrame (`close_wide`) com tickers nas colunas.
-- **Preparação:** `src/prep.py` → `long_df` (`unique_id`, `ds`, `y`) e features básicas.
-- **Modelo:** `src/models_ts.py` → `train_predict_nhits(...)` treina e produz `yhat_df` (`unique_id`, `ds`, `y_hat`) com *fallback* para séries curtas.
-- **Sinais:** `src/signals.py` → transforma `yhat_df` em `entries/exits` por ticker (sem shift).
-- **Backtest:** `src/backtest.py` → aplica **shift(1)** (executa no próximo candle), cria portfólios e métricas robustas.
-- **Experimento:** `src/run_experiment.py` → orquestra tudo (CLI).
-- **Smoke test:** `scripts/test_backtest_smoke.py` → garante o `shift(1)` e métricas básicas.
+- Ingestão: `src/ingest.py` → `close_wide` (tickers em colunas).
+- Preparação: `src/prep.py` → `long_df` (`unique_id`, `ds`, `y`).
+- Modelo: `src/models_ts.py` → `train_predict_nhits(...)` (retorna `yhat_df`).
+- Sinais: `src/signals.py` → `entries/exits` por ticker (sem shift aqui).
+- Backtest: `src/backtest.py` → aplica `shift(1)` (T+1), cria portfólios e métricas tolerantes a versão.
+- Web: `scripts/web_app.py` (Paper‑Live, pré‑cheque, config, agendador, reset de Go‑Live).
+- Jobs: `scripts/daily_jobs.py` (manhã/EOD) + `scripts/run_universe_scan.py` (ranking).
 
-Saídas principais:
-- `reports/summary_baseline.csv` (resumo por ticker)
-- `reports/trades_{TICKER}.csv` (lista de trades legível)
+Saídas web: `reports/web_summary_{TICKER}_{TS}.csv`, `reports/web_trades_{TICKER}_{TS}.csv`.
 
 ---
 
-## Instalação
+## Docker (servidor)
 
 ```bash
-# 1) clonar e entrar
+docker build -t teste-previsao1:latest .
+docker run -d --name previsao-web -p 5000:5000 -v $(pwd)/reports:/app/reports teste-previsao1:latest
+```
+
+Acesse `http://SEU_SERVIDOR:5000`. Página de configurações: `/config`.
+
+Agendador e status (polling) também em `/config`.
+
+---
+
+## Guia rápido (check‑list)
+
+1) Suba o container e acesse `/config`.
+   - Habilite o agendador e defina `am_time` (ex.: 08:00) e `eod_time` (ex.: 20:05).
+   - Defina o universo (arquivo) e os defaults: `NHITS – modo = Completo`, `Contexto = Automático`, `Ajuste automático = ON` e `min_input_size ≥ 30`.
+   - Salve e, se quiser, clique “Executar agora (EOD)” para testar. Acompanhe o status em tempo real.
+
+2) Na página inicial:
+   - Selecione o ticker, mantenha “Contexto de treino = Automático” e “NHITS – modo = Completo”.
+   - Deixe “Paper‑Live” ligado. Defina o aporte e o mês de referência.
+   - Clique “Executar simulação”.
+
+3) Validação rápida no card de resultado:
+   - Verifique o “Pré‑cheque”: `Barras X/Y (OK)` e “Paper‑Live (ON)”.
+   - Confira “Dados até: AAAA‑MM‑DD (último pregão)” e “Go‑Live”.
+   - Se houver “Compra agendada…”, significa que havia sinal em T−1; a execução aparece no pregão seguinte.
+
+4) Auditoria e histórico:
+   - Resumo e trades do Web: `reports/web_summary_{TICKER}_{TS}.csv` e `reports/web_trades_{TICKER}_{TS}.csv`.
+   - Ranking do universo: `reports/universe_rankings.csv` (e cópias diárias em `reports/daily/YYYY‑MM‑DD/`).
+   - Registry local: `reports/experiments.sqlite`.
+
+5) Reexecuções diárias:
+   - O agendador roda os jobs nos horários configurados; os campos de status em `/config` atualizam por polling.
+   - Você pode resetar o Go‑Live por ticker (botão no card) ou “Zerar todos” em `/config` para recomeçar os testes.
+
+Boas práticas:
+- Prefira 12–24 meses de contexto (Automático). Use “Rápido” apenas para diagnóstico.
+- Mantenha “Paper‑Live” ON para não herdar trades históricos.
+- Ajuste o risco (perfil B) se o aporte for baixo e o tamanho de posição estiver zerando.
+
+---
+
+## Web App (Paper‑Live)
+- Treina com histórico, mas opera só a partir do Go‑Live (último pregão ao clicar). Sem herdar trades passados.
+- “Compra agendada” quando há `entry` em T−1 (execução em T+1 garantida pelo backtest).
+- Contexto de treino seguro: Automático (12–24 meses) com pré‑cheque de barras mínimas. Bloqueio de execuções fracas no modo básico.
+- NHITS – modos: Completo (n_windows=24) e Rápido (n_windows=12).
+- Ajustes automáticos (opcionais): quando faltar histórico, o app tenta expandir período e reduzir `input_size` (limite `min_input_size`) e `n_windows`.
+- Relatórios do usuário: `reports/web_*`; Go‑Live por ticker em `reports/user_state.sqlite` (reset por ticker ou “zerar todos” em `/config`).
+
+Preset recomendado: Contexto = Automático; NHITS = Completo; Paper‑Live ON; Perfil B (risco 0,5%); Ref. mensal = mês corrente.
+
+---
+
+## Capturas de tela
+
+As imagens a seguir ilustram a UI atual (caso deseje anexar seus próprios screenshots, salve‑os em `docs/img/` e atualize os caminhos):
+
+- Página inicial (execução por ticker): `docs/img/web-index.png`
+- Configurações e agendador (status em tempo real): `docs/img/web-config.png`
+
+---
+
+## Instalação local (opcional)
+```bash
 git clone <SEU_FORK_OU_REPO>
 cd teste-previsao1
-
-# 2) instalar dependências
-poetry install  # ou pip install -r requirements.txt (se existir)
+poetry install
 ```
 
-> **Python**: projeto tem sido usado com Python 3.10.  
-> **vectorbt**: versões diferentes podem mudar nomes de colunas/estatísticas; o backtest foi escrito para ser robusto a isso.
-
----
-
-## Como rodar um experimento
-
-Exemplo (mesmos parâmetros que usamos nos testes recentes):
-
+### CLI (experimentos)
 ```bash
-poetry run python -m src.run_experiment   --tickers VALE3.SA PETR4.SA BOVA11.SA ITUB4.SA   --start 2020-01-01   --horizon 5   --n-windows 8   --input-size 60   --max-steps 300   --fees 0.0005 --slippage 0.0005 --init-cash 100000
+poetry run python -m src.run_experiment \
+  --tickers VALE3.SA PETR4.SA BOVA11.SA ITUB4.SA \
+  --start 2020-01-01 \
+  --horizon 5 --n-windows 8 --input-size 60 --max-steps 300 \
+  --fees 0.0005 --slippage 0.0005 --init-cash 100000
 ```
 
-Dica: rode primeiro com menos `n-windows` e `max-steps` para ver o *pipeline* funcionando, depois aumente.
+---
+
+## Garantias anti look‑ahead
+- O atraso de execução é aplicado no backtest:
+  ```python
+  entries = entries.shift(1, fill_value=False)
+  exits   = exits.shift(1, fill_value=False)
+  ```
+- Não aplicamos `shift(1)` em `signals.py`.
 
 ---
 
-## Garantias anti look-ahead
-
-- O **atraso de execução** está concentrado no **backtest**:
-  - Em `run_backtest(...)` aplicamos:
-    ```python
-    entries = entries.shift(1, fill_value=False)
-    exits   = exits.shift(1, fill_value=False)
-    ```
-  - Isso garante que o sinal gerado em *t* só é executado em *t+1*.
-- Não aplicamos `shift(1)` em `signals.py` para evitar duplicidade.
+## Agendador & Config (/config)
+- Persistência em `reports/app_config.sqlite` (sem .env):
+  - Horários `am_time` (manhã) / `eod_time` (pós‑fechamento)
+  - Universo (arquivo), modo NHITS padrão (fast/full)
+  - Contexto (auto/6/12/24), auto‑ajuste e `min_input_size`
+- Ações: “Executar agora (manhã/EOD)”, “Executar scan”, “Zerar todos os Go‑Live”.
+- Status por polling: fila, executando, último job e links para `reports/universe_rankings.csv` (e cópia diária).
 
 ---
 
-## Interpretação das métricas
-
-- `Total Return [%]`: retorno total do portfólio (robusto a versões).
-- `Sharpe Ratio`: calculado de forma tolerante; se a versão do vectorbt exigir `freq`, pode sair `NaN`.
-- `Max Drawdown [%]`: **positivo** por convenção (ex.: 12.3 = -12.3%).
-- `Win Rate [%]` e `Trades`: a partir de `trades.records_readable` (ou `records` como *fallback*).
-
-Os arquivos `reports/trades_{TICKER}.csv` ajudam a auditar entradas/saídas.
+## Registro de experimentos (SQLite)
+Habilite no YAML ou via CLI. A UI também registra runs no mesmo SQLite (`reports/experiments.sqlite`).
 
 ---
 
-## Notebook de relatório rápido
-
-Depois de rodar um experimento, abra e execute:
-- `notebooks/quick_report.ipynb`
-
-Ele lê `reports/summary_baseline.csv`, mostra a tabela e plota um gráfico simples
-de `Total Return [%]` por ticker.
-
-> **Obs.**: usamos `matplotlib` puro (sem seaborn, sem estilos / cores específicas).
+## Sinais e filtros (opcionais)
+- Trend/SMA, limiar dinâmico por volatilidade, Bandas de Bollinger, stop por ATR, cooldown e máximo de barras em posição.
 
 ---
 
-## Registro local de experimentos (SQLite)
-
-Para não perder histórico de configurações/testes, habilite o **registry** local:
-
-1. No YAML (`configs/baseline.yaml`, por exemplo):
-   ```yaml
-   registry:
-     enabled: true
-     path: "reports/experiments.sqlite"
-   ```
-   ou via CLI: `--registry-enabled --registry-path reports/experiments.sqlite`.
-
-2. Cada execução salva:
-   - Metadados (nome do experimento, notas, git hash, config em JSON).
-   - Métricas por ticker (Total Return, Sharpe, Win Rate, Max DD, Trades).
-
-3. Para inspecionar as execuções mais recentes:
-   ```bash
-   poetry run python - <<'PY'
-   from src.exp_store import last_runs
-   import pandas as pd
-
-   df = last_runs("reports/experiments.sqlite", limit=20)
-   pd.options.display.width = 0
-   print(df)
-   PY
-   ```
-
-O schema fica em `src/exp_store.py`; é independente do MLflow e funciona offline.
-
----
-
-## Grid search automatizado
-
-Use `scripts/grid_search.py` para testar múltiplas combinações de parâmetros sem
-repetir manualmente:
-
-```bash
-poetry run python -m scripts.grid_search \
-  --config configs/baseline.yaml \
-  --dyn-thresh-k 0.9 1.1 1.3 \
-  --trend-sma 100 150 \
-  --bb-window 50 --bb-k 2.0 2.5 \
-  --cooldown-bars 0 3 \
-  --target-total-return 5 --max-drawdown 30
-```
-
-Características:
-- Reaproveita ingestão, preparo e NHITS (cacheia previsões por `lead_for_signal`).
-- Escreve cada tentativa em `reports/summary_grid_XXXX.csv` e, se o registry
-  estiver habilitado, salva no SQLite automaticamente.
-- Early-stop quando atingir `--target-total-return`, `--target-sharpe` e/ou
-  `--max-drawdown`.
-- Exporta um consolidado em `reports/grid_search_results.csv`.
-
----
-
-## Filtros opcionais de sinais
-
-Além do threshold fixo/dinâmico e do filtro de tendência, agora é possível ligar:
-
-- **Bandas de Bollinger** (`bb_window`, `bb_k`): entra apenas acima da banda
-  superior e força saída quando o preço cai abaixo da média.
-- **Stop por ATR aproximado** (`atr_window`, `atr_stop_k`): usa a média do
-  movimento absoluto dos fechamentos como proxy de ATR para trailing stop.
-- **Cooldown pós-saída** (`cooldown_bars`) e **tempo máximo em posição**
-  (`max_hold_bars`).
-
-Os parâmetros podem ser definidos no YAML (`signals.*`) ou via CLI
-(`--bb-window`, `--atr-stop-k`, etc.). Todos ficam desligados por padrão para
-manter o baseline original.
-
----
-
-## Perfis Finais (consolidados)
-
-Perfis recomendados a partir dos últimos experimentos (registry + grid):
-
-- Perfil A (retorno): lead=2, trend_sma=100, consec=1, dyn_k=0.8, exp=0.0, ATR(14,1.5)
-- Perfil B (eficiência): Perfil A + risk_per_trade=0.005
-- Variante A2 (robustez): Perfil A + cooldown_bars=3 + exp_thresh=0.0002
-
-Médias agregadas (por ticker) e duração média dos trades:
-
-| profile | avg_total_return | avg_sharpe | avg_win_rate | avg_max_drawdown | total_trades | mean_trade_duration_days |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| A_ATR | 4.3174 | 32.4708 | 100.0 | 0.0 | 9 | 4.25 |
-| B_ATR_risk005 | 2.0326 | 24.9794 | 100.0 | 0.0 | 10 | 12.5667 |
-| A2_ATR_cooldown3_exp0002 | 3.1102 | 26.7696 | 100.0 | 0.0 | 7 | 4.1111 |
-
-Notas:
-- O sizing por risco (B) aumenta a eficiência (Sharpe) e alonga a duração média das posições.
-- Cooldown+exp_thresh (A2) reduz reentradas rápidas e falsos positivos sem secar totalmente os sinais.
-
-Arquivos de referência:
-- Resumos: `reports/summary_final_A.csv`, `reports/summary_final_B.csv`, `reports/summary_final_A_cooldown3_exp0002.csv`
-- Comparativos: `reports/compare_A_B_A2_by_ticker.csv`, `reports/summary_compare_A_B_A2.csv`
-- Trades por perfil: `reports/trades_A_{TICKER}.csv`, `reports/trades_B_{TICKER}.csv`, `reports/trades_A2_{TICKER}.csv`
-
-Como rodar diretamente:
-```bash
-poetry run python -m src.run_experiment --config configs/final_A.yaml
-poetry run python -m src.run_experiment --config configs/final_B.yaml
-```
-
-Visualização rápida (Total Return [%] por ticker):
-
-![Retornos por perfil](reports/returns_by_profile.png)
-
-Visualização rápida (Sharpe Ratio por ticker):
-
-![Sharpe por perfil](reports/sharpe_by_profile.png)
-
----
-
-## Smoke test (anti-regressão do backtest)
-
+## Smoke test (anti‑regressão)
 ```bash
 poetry run python -m scripts.test_backtest_smoke
-```
-
-Saída esperada (exemplo):
-```
-DEBUG TESTE.SA: entries=1 exits=1
-
-=== SMOKE SUMMARY ===
-          Total Return [%]  Sharpe Ratio  Win Rate [%]  Max Drawdown [%]  Trades
-ticker
-TESTE.SA          2.150538      9.062123         100.0               NaN       1
-
-OK ✅  Shift(1) aplicado corretamente e métricas básicas OK.
 ```
 
 ---
 
 ## Dores e soluções incorporadas
-
-- **Índice duplicado na reindexação** → normalizamos antes de `reindex`.
-- **Sinais com dtype estranho** → `_ensure_bool_series` força `bool`.
-- **Séries curtas no NHITS** → `start_padding_enabled=True` + *fallback* de `input_size`.
-- **Parâmetros “a mais” no modelo** → `train_predict_nhits` aceita `**_` e ignora os não usados.
-- **Métricas variando conforme versão** → *getters* tolerantes.
-
----
-
-## Roadmap
-
-1. **Varredura de limiar (τ)** para transformar `y_hat` em sinal (grid de thresholds).
-2. **Regras de risco**: tamanho de posição, time-stop, stop-loss.
-3. **Walk-forward com refit** periódico.
-4. **Features exógenas** (câmbio, commodities, CDI).
-5. **Relatório HTML completo** com curva de capital, distribuição de retornos e heatmaps de performance por parâmetro.
+- Índice duplicado → saneamento antes de `reindex`.
+- Sinais com dtype estranho → `_ensure_bool_series` força `bool`.
+- Séries curtas no NHITS → padding + redução controlada de `input_size`.
+- Variação de métricas entre versões do vectorbt → getters tolerantes.
+- Operar só após o depósito → Paper‑Live (corte no Go‑Live) + relatórios do usuário separados.
 
 ---
 
-## TODO / Próximos passos imediatos
-
-- scripts/run_universe_scan.py: ler `configs/universe_b3.txt`, varrer por batches (scan leve), rankear por Sharpe/Retorno, salvar no registry e `reports/universe_rankings.csv`.
-- configs/universe_b3.txt: placeholder com alguns tickers `.SA` (você pode substituir pelo seu universo).
-- Backtest de portfólio combinado (opcional): modo que agrega em uma única curva de capital (mock capital) a partir das posições por ticker.
-- configs/forward_test.yaml: job de forward test com período recente fixo usando os perfis A/B consolidados.
-
-
-## Perguntas frequentes
-
-**1) “Levei `TypeError: train_predict_nhits() got an unexpected keyword argument …`”**  
-→ Atualize `src/models_ts.py` para a versão que aceita `**_` no final da assinatura da função.
-Parâmetros aceitos: `df_long`, `horizon`, `n_windows`, `input_size`, `max_steps`,
-`random_seed`, `start_padding_enabled`, `use_gpu=False` (opcional).
-
-**2) “Sharpe deu `NaN`”**  
-→ Em algumas versões do vectorbt, precisa de `freq`. Nosso *getter* tenta extrair de várias fontes;
-se ainda assim vier `NaN`, é comportamento esperado (não afeta outras métricas).
-
-**3) “FutureWarning do NIXTLA_ID_AS_COL”**  
-→ Pode ignorar, ou exportar: `export NIXTLA_ID_AS_COL=1`.
+## Scripts úteis
+- `scripts/web_app.py` – frontend Flask.
+- `scripts/daily_jobs.py` – jobs manhã/EOD controlados pela config.
+- `scripts/run_universe_scan.py` – scan do universo + ranking.
+- `scripts/test_backtest_smoke.py` – sanity do backtest.
 
 ---
 
-## Estrutura (esperada)
+## FAQ
+1) “TypeError … unexpected keyword argument”  
+→ Use as assinaturas atuais de `train_predict_nhits` (aceita `**kwargs`).
 
-```
-.
-├── src/
-│   ├── ingest.py
-│   ├── prep.py
-│   ├── models_ts.py
-│   ├── signals.py
-│   ├── backtest.py
-│   └── run_experiment.py
-├── scripts/
-│   └── test_backtest_smoke.py
-├── reports/
-│   ├── summary_baseline.csv
-│   └── trades_*.csv
-└── notebooks/
-    └── quick_report.ipynb
-```
+2) “Sharpe = NaN”  
+→ Dependendo da versão do vectorbt, `freq` é necessária. Os getters tolerantes já tratam; pode continuar NaN sem afetar outras métricas.
 
----
-
-**Qualquer divergência entre seu repositório e este README**: use este documento como
-ilha de referência *ideal* e ajuste os arquivos — ou me diga que eu te mando os arquivos completos atualizados.
+3) FutureWarning (NIXTLA_ID_AS_COL)  
+→ Mensagem da NeuralForecast. Pode ser ignorada; não afeta o pipeline.
