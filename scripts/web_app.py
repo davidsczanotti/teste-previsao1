@@ -449,9 +449,10 @@ def index():
         "start": default_start,
         "end": default_end,
         "profile": "B",
-        "period": "custom",
+        "period": "auto",
         "ref_month": current_month,
         "paper_live": "1",
+        "advanced": "0",
     }
 
     result = None
@@ -463,9 +464,10 @@ def index():
                 "start": request.form.get("start") or form_state["start"],
                 "end": request.form.get("end") or form_state["end"],
                 "profile": request.form.get("profile") or form_state["profile"],
-                "period": request.form.get("period") or "custom",
+                "period": request.form.get("period") or form_state["period"],
                 "ref_month": request.form.get("ref_month") or form_state["ref_month"],
                 "paper_live": request.form.get("paper_live", form_state["paper_live"]),
+                "advanced": request.form.get("advanced", form_state["advanced"]),
             }
         )
 
@@ -476,6 +478,61 @@ def index():
         profile = form_state["profile"]
         ref_month = form_state["ref_month"]
         paper_live = True if str(form_state.get("paper_live", "1")) in {"1", "true", "on", "True"} else False
+        advanced = True if str(form_state.get("advanced", "0")) in {"1", "true", "on", "True"} else False
+        period_mode = form_state.get("period", "auto")
+
+        # Contexto de treino seguro: se não avançado, força automação/6-24m
+        try:
+            # Ajusta datas conforme contexto selecionado
+            if not advanced:
+                # Fixa end no último pregão (já calculado). Recalcula start
+                end_dt = datetime.fromisoformat(form_state["end"]) if form_state.get("end") else datetime.today()
+                months_map = {"m6": 6, "m12": 12, "m24": 24}
+                months = months_map.get(period_mode, 12)
+                # 12 meses por padrão (auto)
+                from pandas import DateOffset
+                start_dt = (pd.Timestamp(end_dt) - pd.DateOffset(months=months)).to_pydatetime()
+                start = start_dt.date().isoformat()
+                end = end_dt.date().isoformat()
+                form_state["start"] = start
+                form_state["end"] = end
+        except Exception:
+            pass
+
+        # Pré-cheque: barras mínimas para NHITS
+        precheck = {}
+        try:
+            # Hiperparâmetros padrão usados no web_app
+            horizon = 5
+            input_size = 60
+            n_windows = 24
+            step_size = 5
+            required_bars = max(180, input_size * 4, n_windows * step_size + input_size + horizon + 60)
+            close_chk = get_prices([ticker], start=start, end=end).sort_index()
+            bars = int(close_chk.shape[0])
+            ok_bars = bars >= required_bars
+            precheck = {
+                "no_lookahead": True,
+                "paper_live": bool(paper_live),
+                "bars_available": bars,
+                "required_bars": int(required_bars),
+                "ok_bars": ok_bars,
+            }
+            if not ok_bars and not advanced:
+                flash(
+                    f"Histórico insuficiente para treino robusto (tem {bars}, precisa de {required_bars}). Selecione 12–24 meses ou 'Automático'.",
+                    "error",
+                )
+                return render_template(
+                    "index.html",
+                    tickers=tickers,
+                    result=None,
+                    results=list(reversed(list(LATEST_RESULTS.values()))),
+                    recent=last_runs("reports/experiments.sqlite", limit=15) if Path("reports/experiments.sqlite").exists() else pd.DataFrame(),
+                    form=form_state,
+                )
+        except Exception:
+            pass
 
         try:
             aporte_val = float(aporte_raw or 100000)
@@ -506,6 +563,8 @@ def index():
                     ref_month=ref_month,
                     paper_live=paper_live,
                 )
+                if precheck:
+                    result["precheck"] = precheck
                 # manter cache ordenado por ticker recente
                 if ticker in LATEST_RESULTS:
                     del LATEST_RESULTS[ticker]

@@ -344,22 +344,22 @@
           </div>
 
           <div class="field">
-            <label for="period">Período rápido</label>
+            <label for="period">Contexto de treino</label>
             <select name="period" id="period">
-              <option value="custom" {% if form.period == 'custom' %}selected{% endif %}>Personalizado</option>
-              <option value="last30" data-days="30" {% if form.period == 'last30' %}selected{% endif %}>Último mês (30 dias)</option>
-              <option value="last90" data-days="90" {% if form.period == 'last90' %}selected{% endif %}>Últimos 3 meses</option>
-              <option value="last180" data-days="180" {% if form.period == 'last180' %}selected{% endif %}>Últimos 6 meses</option>
-              <option value="last365" data-days="365" {% if form.period == 'last365' %}selected{% endif %}>Último ano</option>
+              <option value="auto" {% if form.period == 'auto' %}selected{% endif %}>Automático (recomendado)</option>
+              <option value="m6" data-months="6" {% if form.period == 'm6' %}selected{% endif %}>6 meses</option>
+              <option value="m12" data-months="12" {% if form.period == 'm12' %}selected{% endif %}>12 meses</option>
+              <option value="m24" data-months="24" {% if form.period == 'm24' %}selected{% endif %}>24 meses</option>
+              <option value="custom" {% if form.period == 'custom' %}selected{% endif %}>Personalizado (avançado)</option>
             </select>
           </div>
 
-          <div class="field">
+          <div class="field adv-only">
             <label for="start">Início</label>
             <input type="date" id="start" name="start" value="{{ form.start }}" />
           </div>
 
-          <div class="field">
+          <div class="field adv-only">
             <label for="end">Fim</label>
             <input type="date" id="end" name="end" value="{{ form.end }}" />
           </div>
@@ -377,15 +377,22 @@
             </select>
           </div>
 
-          <div class="field">
+          <div class="field adv-only">
             <label for="ref_month">Mês de referência (YYYY-MM)</label>
             <input type="month" id="ref_month" name="ref_month" value="{{ form.ref_month }}" />
           </div>
 
-          <div class="field">
+          <div class="field adv-only">
             <label>
               <input type="checkbox" name="paper_live" {% if form.paper_live in ['1','true','on','True'] %}checked{% endif %} />
               Operar apenas a partir do último pregão (Paper‑Live)
+            </label>
+          </div>
+
+          <div class="field">
+            <label>
+              <input type="checkbox" id="advanced" name="advanced" {% if form.advanced in ['1','true','on','True'] %}checked{% endif %} />
+              Mostrar opções avançadas
             </label>
           </div>
 
@@ -450,6 +457,11 @@
             </form>
           </div>
         </div>
+        {% if result.precheck %}
+          <div class="status-detail">
+            Pré‑cheque: Sem lookahead (OK) · Paper‑Live ({{ 'ON' if result.precheck.paper_live else 'OFF' }}) · Barras: {{ result.precheck.bars_available }}/{{ result.precheck.required_bars }} ({{ 'OK' if result.precheck.ok_bars else 'Insuficiente' }})
+          </div>
+        {% endif %}
         <div class="result-meta">
           <span><strong>Aporte:</strong> R$ {{ "{:,.2f}".format(result.aporte) }}</span>
           <span><strong>Perfil:</strong> {{ result.profile }}</span>
@@ -779,6 +791,7 @@
         const periodSelect = document.getElementById('period');
         const startInput = document.getElementById('start');
         const endInput = document.getElementById('end');
+        const advToggle = document.getElementById('advanced');
 
         if (!periodSelect || !startInput || !endInput) {
           return;
@@ -798,11 +811,26 @@
         periodSelect.addEventListener('change', (event) => {
           const target = event.target;
           const selected = target.options[target.selectedIndex];
-          const daysAttr = selected.getAttribute('data-days');
-          if (daysAttr) {
-            recalcStart(parseInt(daysAttr, 10));
+          const mAttr = selected.getAttribute('data-months');
+          if (selected.value === 'auto') {
+            // 12 meses por padrão no auto (UI); validação segura acontece no backend
+            recalcStart(365);
+          } else if (mAttr) {
+            const months = parseInt(mAttr, 10);
+            recalcStart(Math.round(months * 30.4));
           }
         });
+
+        const updateAdvancedVisibility = () => {
+          const adv = advToggle && advToggle.checked;
+          document.querySelectorAll('.adv-only').forEach(el => {
+            el.style.display = adv ? '' : 'none';
+          });
+        };
+        if (advToggle) {
+          advToggle.addEventListener('change', updateAdvancedVisibility);
+          updateAdvancedVisibility();
+        }
       })();
     </script>
   </body>
