@@ -228,7 +228,15 @@ def run_pipeline_for_ticker(
                     filtered_trades_df = trades_df
             if filtered_trades_df is None:
                 filtered_trades_df = trades_df
-            trades_preview = filtered_trades_df.head(10).to_dict(orient="records")
+            # Tornar mais claro: se Status != Closed, esconder Exit Timestamp na prévia
+            try:
+                _prev = filtered_trades_df.copy()
+                if "Status" in _prev.columns and "Exit Timestamp" in _prev.columns:
+                    mask_open = _prev["Status"].astype(str).str.lower() != "closed"
+                    _prev.loc[mask_open, "Exit Timestamp"] = ""
+                trades_preview = _prev.head(10).to_dict(orient="records")
+            except Exception:
+                trades_preview = filtered_trades_df.head(10).to_dict(orient="records")
         except Exception:
             trades_columns = []
             trades_preview = []
@@ -365,6 +373,7 @@ def run_pipeline_for_ticker(
         "status": status,
         "ref_month": ref_month,
         "filtered_trades_count": int(len(analytics_df)) if analytics_df is not None else 0,
+        "last_bar": str(close.index.max().date()) if not close.empty else None,
     }
 
 
@@ -372,7 +381,12 @@ def run_pipeline_for_ticker(
 def index():
     tickers = _load_universe()
     today = datetime.today().date()
-    default_end = today.strftime("%Y-%m-%d")
+    # Padrão: último dia útil (T-1)
+    try:
+        default_end_ts = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=1)[0]
+        default_end = default_end_ts.strftime("%Y-%m-%d")
+    except Exception:
+        default_end = today.strftime("%Y-%m-%d")
     default_start = (today - timedelta(days=365)).strftime("%Y-%m-%d")
 
     current_month = today.strftime("%Y-%m")

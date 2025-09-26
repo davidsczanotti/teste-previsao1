@@ -435,6 +435,9 @@
           <span><strong>Perfil:</strong> {{ result.profile }}</span>
           <span><strong>Período:</strong> {{ result.start }} → {{ result.end or 'atual' }}</span>
           <span><strong>Execução:</strong> {{ result.ts }}</span>
+          {% if result.last_bar %}
+          <span><strong>Dados até:</strong> {{ result.last_bar }} (último pregão)</span>
+          {% endif %}
         </div>
 
         <div class="status-detail">{{ result.status.detail }}</div>
